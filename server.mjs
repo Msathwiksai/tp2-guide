@@ -85,6 +85,9 @@ app.use('/api', (req, res, next) => {
   if (recent.length >= MAX_PER_WINDOW) return res.status(429).json({ error: 'Too many requests. Please try again shortly.' });
   recent.push(now); requests.set(req.ip, recent); next();
 });
+// The control-character class is the entire point of this sanitiser, so the
+// no-control-regex rule is disabled deliberately rather than worked around.
+// eslint-disable-next-line no-control-regex
 const clean = (value, max = 300) => typeof value === 'string' ? value.replace(/[\u0000-\u001F]/g, ' ').replace(/[<>]/g, '').trim().slice(0, max) : '';
 const requireText = (value, name, max) => { const text = clean(value, max); if (!text) throw new Error(`${name} is required.`); return text; };
 const guideSchema = { type: Type.OBJECT, properties: {

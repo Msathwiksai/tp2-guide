@@ -4,6 +4,7 @@ import { Tutorial, Category } from '../types';
 import { GLOBAL_BASICS } from '../constants';
 import { useNavigate } from 'react-router-dom';
 import ScrollVideo from './ScrollVideo';
+import PageMeta from './PageMeta';
 
 // Module scope: rebuilding this inside the component produced a new array
 // identity every render, which invalidated the useMemo below on every render.
@@ -64,6 +65,10 @@ const Home: React.FC<HomeProps> = ({ tutorials, onSelect, onWatchDemo, onStartCo
 
   return (
     <div className="space-y-24 animate-in fade-in duration-700">
+      <PageMeta
+        title="Tp2 Guide"
+        description="Step-by-step software guides generated for the exact version you have installed. Operating systems, creative tools, developer tooling and more."
+      />
       <section className="text-center space-y-10 py-16 md:py-28 relative overflow-hidden">
         <div className="relative z-10">
           <div className="inline-flex items-center gap-3 px-6 py-2 bg-amber-50 rounded-full border border-amber-100 mb-8 animate-bounce">

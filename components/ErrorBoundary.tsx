@@ -63,7 +63,7 @@ class ErrorBoundary extends React.Component<Props, State> {
             Try Again
           </button>
           <a
-            href="#/"
+            href="/"
             onClick={() => this.setState({ error: null })}
             className="bg-stone-100 text-stone-500 px-14 py-6 rounded-3xl font-black uppercase tracking-widest text-[10px] hover:bg-white transition-all border border-stone-200"
           >

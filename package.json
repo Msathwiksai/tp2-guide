@@ -7,7 +7,11 @@
     "dev": "concurrently \"node --env-file-if-exists=.env.local server.mjs\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node --env-file-if-exists=.env.local server.mjs"
+    "start": "node --env-file-if-exists=.env.local server.mjs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint"
   },
   "dependencies": {
     "@google/genai": "^1.41.0",
@@ -18,14 +22,20 @@
     "react-router-dom": "^7.13.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.14.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^5.0.0",
     "concurrently": "^10.0.5",
+    "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.6",
+    "globals": "^17.12.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~5.8.2",
+    "typescript-eslint": "^8.69.0",
     "vite": "^6.2.0"
   }
 }

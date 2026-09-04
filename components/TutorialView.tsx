@@ -3,11 +3,23 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { TUTORIALS } from '../constants';
 import { getGuideContent, generateStepImage, verifyApplicationExistence, ApiError } from '../services/geminiService';
-import { AIResponse, Tutorial, GuideStep, ExploringMode, Category } from '../types';
+import { AIResponse, Tutorial, ExploringMode, Category } from '../types';
 import StepNarration from './StepNarration';
+import PageMeta from './PageMeta';
 
 interface TutorialViewProps {
   onAskDoubt: (question: string) => void;
+}
+
+/** localStorage throws outright in some privacy modes, so every access is guarded. */
+function readProgress(key: string | null): Set<number> {
+  if (!key) return new Set();
+  try {
+    const saved = window.localStorage.getItem(key);
+    return saved ? new Set(JSON.parse(saved) as number[]) : new Set();
+  } catch {
+    return new Set();
+  }
 }
 
 const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
@@ -64,6 +76,7 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
   
   const doubtInputRef = useRef<HTMLInputElement>(null);
   const guideRequestIdRef = useRef(0);
+  const requestedImagesRef = useRef<Set<string>>(new Set());
 
   // Progress is keyed per topic+version+mode, because step numbers only mean
   // anything within one specific generated guide.
@@ -71,17 +84,14 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
     ? `tp2:progress:${id}:${selectedTopic}:${selectedVersion}:${exploringMode}`
     : null;
 
-  // Restore on mount / when the guide identity changes. localStorage access is
-  // guarded: it throws outright in some privacy modes rather than returning null.
-  useEffect(() => {
-    if (!progressKey) return;
-    try {
-      const saved = window.localStorage.getItem(progressKey);
-      setCompletedSteps(saved ? new Set(JSON.parse(saved) as number[]) : new Set());
-    } catch {
-      setCompletedSteps(new Set());
-    }
-  }, [progressKey]);
+  // Restoring during render (rather than in an effect) is React's documented
+  // pattern for resetting state when an identity changes. Doing it in an effect
+  // causes a cascading second render, which react-hooks/set-state-in-effect flags.
+  const [restoredKey, setRestoredKey] = useState<string | null>(null);
+  if (progressKey !== restoredKey) {
+    setRestoredKey(progressKey);
+    setCompletedSteps(readProgress(progressKey));
+  }
 
   useEffect(() => {
     if (!progressKey) return;
@@ -140,6 +150,7 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
       // completedSteps is intentionally NOT reset here — the persistence effect
       // restores saved progress for this guide's key. Clearing it would wipe it.
       setStepImages({});
+      requestedImagesRef.current.clear();
     } catch (err) {
       if (requestId !== guideRequestIdRef.current) return;
       if (err instanceof ApiError && err.isUnavailable) {
@@ -181,7 +192,11 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
   };
 
   useEffect(() => {
-    if (guide && guide.steps[activeStep] && !stepImages[activeStep]) {
+    // Tracked in a ref rather than by reading `stepImages`: this effect writes
+    // that state, so depending on it would either loop or go stale.
+    const requestKey = `${progressKey}:${activeStep}:${imageRetry}`;
+    if (guide && guide.steps[activeStep] && !requestedImagesRef.current.has(requestKey)) {
+      requestedImagesRef.current.add(requestKey);
       const step = guide.steps[activeStep];
       const stepIndex = activeStep;
       let cancelled = false;
@@ -203,7 +218,7 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
       fetchImage();
       return () => { cancelled = true; };
     }
-  }, [activeStep, guide, tutorial, selectedVersion, imageRetry]);
+  }, [activeStep, guide, tutorial, selectedVersion, imageRetry, progressKey]);
 
   const toggleStep = (idx: number) => {
     setCompletedSteps(prev => {
@@ -394,6 +409,10 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
   if (!selectedTopic && !loading) {
     return (
       <div className="max-w-5xl mx-auto space-y-16 py-12 animate-in fade-in slide-in-from-top-4 duration-1000">
+        <PageMeta
+          title={`${tutorial.name} guides`}
+          description={`Version-aware ${tutorial.name} tutorials covering ${tutorial.popularTopics.slice(0, 3).join(', ')} and more.`}
+        />
         {/* This screen previously had no way back — the only exit was the
             header logo, which is not obvious as a navigation control. */}
         <nav aria-label="Breadcrumb">
@@ -530,6 +549,12 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
 
   return (
     <div className="flex flex-col lg:flex-row gap-16 pb-40 animate-in slide-in-from-bottom-12 duration-700">
+      {/* The searchable page: "<topic> in <app> <version>" is exactly what
+          people type into a search engine. */}
+      <PageMeta
+        title={`${selectedTopic} in ${tutorial.name} ${selectedVersion}`}
+        description={guide.overview?.slice(0, 160) || `A step-by-step guide to ${selectedTopic} in ${tutorial.name} ${selectedVersion}.`}
+      />
       <aside className="lg:w-96 flex-shrink-0">
         <div className="sticky top-28 space-y-10">
           {/* Two levels, because this button used to say "The Library" while

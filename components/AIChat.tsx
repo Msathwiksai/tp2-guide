@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { askAIQuestion } from '../services/geminiService';
 
 interface Message {
@@ -89,27 +89,37 @@ const AIChat: React.FC<AIChatProps> = ({ activeContext, externalMessage, onMessa
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isTyping, state]);
 
-  useEffect(() => {
-    if (externalMessage) {
-      setState('CHAT');
-      if (messages.length === 0) {
-        setMessages([{ text: `Protocol activated for **${activeContext}**. \n\nI can assist with installation, updates, or deep architectural questions. \n\nHow may I facilitate your expertise?`, isUser: false }]);
-      }
-      handleExternalSend(externalMessage);
-      onMessageHandled?.();
-    }
-  }, [externalMessage]);
-
-  const handleExternalSend = async (text: string) => {
+  const handleExternalSend = useCallback(async (text: string) => {
     setMessages(prev => [...prev, { text, isUser: true }]);
     setIsTyping(true);
     try {
       const response = await askAIQuestion(activeContext, text);
       setMessages(prev => [...prev, { text: response, isUser: false }]);
-    } catch (err) {
+    } catch {
       setMessages(prev => [...prev, { text: "Protocol error. Intelligence link unstable.", isUser: false }]);
     } finally { setIsTyping(false); }
-  };
+  }, [activeContext]);
+
+  /**
+   * `externalMessage` is a one-shot command channel: the parent sets it, this
+   * opens the chat and fires the question, then clears it via onMessageHandled.
+   * Opening the panel is genuinely a state change in response to that external
+   * trigger, so the setState-in-effect rule is suppressed here specifically.
+   * Only `externalMessage` belongs in the dependency list — re-running when the
+   * context or callback changes would resend the same question.
+   */
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!externalMessage) return;
+    setState('CHAT');
+    setMessages(prev => prev.length === 0
+      ? [{ text: `Protocol activated for **${activeContext}**. \n\nI can assist with installation, updates, or deep architectural questions. \n\nHow may I facilitate your expertise?`, isUser: false }]
+      : prev);
+    handleExternalSend(externalMessage);
+    onMessageHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalMessage]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const startChat = (initialMessage?: string) => {
     setMessages([{ text: `Protocol activated for **${activeContext}**. \n\nI am standing by to facilitate your mastery. What shall we analyze?`, isUser: false }]);
@@ -129,7 +139,7 @@ const AIChat: React.FC<AIChatProps> = ({ activeContext, externalMessage, onMessa
     try {
       const response = await askAIQuestion(activeContext, textToSend);
       setMessages(prev => [...prev, { text: response, isUser: false }]);
-    } catch (err) {
+    } catch {
       setMessages(prev => [...prev, { text: "Intelligence link interrupted.", isUser: false }]);
     } finally { setIsTyping(false); }
   };

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import PageMeta from '../PageMeta';
 
 /** Without this, any unknown or stale link rendered a completely blank page. */
 const NotFound: React.FC = () => {
@@ -7,6 +8,9 @@ const NotFound: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto py-40 text-center space-y-12 animate-in zoom-in-95 duration-700">
+      {/* Without this the 404 inherited the previous route's title, so search
+          engines and share previews would mislabel a missing page. */}
+      <PageMeta title="Page not found" description="This page does not exist on Tp2 Guide." />
       <div className="text-8xl" aria-hidden="true">🧭</div>
       <h1 className="text-7xl font-black text-stone-900 tracking-tighter">Page Not Found</h1>
       <p className="text-xl text-stone-400 font-medium leading-relaxed bg-white p-12 rounded-[3rem] border-4 border-amber-50">

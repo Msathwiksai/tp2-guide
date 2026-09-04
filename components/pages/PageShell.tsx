@@ -1,4 +1,5 @@
 import React from 'react';
+import PageMeta from '../PageMeta';
 
 /** Shared frame for the standalone content pages, so they share one rhythm. */
 const PageShell: React.FC<{
@@ -9,6 +10,8 @@ const PageShell: React.FC<{
   children: React.ReactNode;
 }> = ({ icon, eyebrow, title, intro, children }) => (
   <div className="max-w-5xl mx-auto space-y-20 py-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    {/* Every content page gets its own title/description for search and shares. */}
+    <PageMeta title={title} description={intro} />
     <header className="text-center space-y-8">
       <div className="w-28 h-28 rounded-[3rem] bg-white mx-auto flex items-center justify-center text-6xl shadow-[0_25px_60px_-15px_rgba(245,158,11,0.3)] border-8 border-amber-50">
         <span aria-hidden="true">{icon}</span>
