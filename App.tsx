@@ -1,18 +1,19 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import Header from './components/Header';
 import Home from './components/Home';
-import TutorialView from './components/TutorialView';
+const TutorialView = lazy(() => import('./components/TutorialView'));
 import AIChat from './components/AIChat';
-import Tips from './components/pages/Tips';
-import Docs from './components/pages/Docs';
-import ApiDocs from './components/pages/ApiDocs';
-import Community from './components/pages/Community';
-import Insights from './components/pages/Insights';
-import Legal from './components/pages/Legal';
-import NotFound from './components/pages/NotFound';
+const Tips = lazy(() => import('./components/pages/Tips'));
+const Docs = lazy(() => import('./components/pages/Docs'));
+const ApiDocs = lazy(() => import('./components/pages/ApiDocs'));
+const Community = lazy(() => import('./components/pages/Community'));
+const Insights = lazy(() => import('./components/pages/Insights'));
+const Legal = lazy(() => import('./components/pages/Legal'));
+const NotFound = lazy(() => import('./components/pages/NotFound'));
 import ScrollToTop from './components/ScrollToTop';
+import ErrorBoundary from './components/ErrorBoundary';
 import { Tutorial } from './types';
 import { TUTORIALS } from './constants';
 
@@ -24,6 +25,16 @@ import { TUTORIALS } from './constants';
  * value is not in the list) while requests still sent a Windows version.
  * Keying on the id forces a clean remount per tutorial.
  */
+/** Shown while a lazily-loaded route chunk is fetched. */
+const RouteFallback: React.FC = () => (
+  <div className="flex items-center justify-center py-60" role="status" aria-label="Loading page">
+    <div className="relative">
+      <div className="w-20 h-20 border-[6px] border-amber-50 rounded-full" />
+      <div className="absolute top-0 w-20 h-20 border-[6px] border-amber-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  </div>
+);
+
 const KeyedTutorialView: React.FC<{ onAskDoubt: (question: string) => void }> = ({ onAskDoubt }) => {
   const { id } = useParams<{ id: string }>();
   return <TutorialView key={id} onAskDoubt={onAskDoubt} />;
@@ -68,6 +79,10 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 container mx-auto px-4 py-12 max-w-7xl">
+        {/* resetKey clears a caught error as soon as the user navigates away,
+            so one broken page never traps them. */}
+        <ErrorBoundary resetKey={location.pathname}>
+          <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route 
             path="/" 
@@ -92,6 +107,8 @@ const App: React.FC = () => {
           <Route path="/legal" element={<Legal />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
       {/* Demo Modal */}

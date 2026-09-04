@@ -65,6 +65,33 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
   const doubtInputRef = useRef<HTMLInputElement>(null);
   const guideRequestIdRef = useRef(0);
 
+  // Progress is keyed per topic+version+mode, because step numbers only mean
+  // anything within one specific generated guide.
+  const progressKey = selectedTopic
+    ? `tp2:progress:${id}:${selectedTopic}:${selectedVersion}:${exploringMode}`
+    : null;
+
+  // Restore on mount / when the guide identity changes. localStorage access is
+  // guarded: it throws outright in some privacy modes rather than returning null.
+  useEffect(() => {
+    if (!progressKey) return;
+    try {
+      const saved = window.localStorage.getItem(progressKey);
+      setCompletedSteps(saved ? new Set(JSON.parse(saved) as number[]) : new Set());
+    } catch {
+      setCompletedSteps(new Set());
+    }
+  }, [progressKey]);
+
+  useEffect(() => {
+    if (!progressKey) return;
+    try {
+      window.localStorage.setItem(progressKey, JSON.stringify([...completedSteps]));
+    } catch {
+      // Storage unavailable or full — progress simply is not persisted.
+    }
+  }, [progressKey, completedSteps]);
+
   useEffect(() => {
     const isStatic = TUTORIALS.some(t => t.id === id);
     if (!isStatic && safeId) {
@@ -110,7 +137,8 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
       if (requestId !== guideRequestIdRef.current) return;
       setGuide(content);
       setActiveStep(0);
-      setCompletedSteps(new Set());
+      // completedSteps is intentionally NOT reset here — the persistence effect
+      // restores saved progress for this guide's key. Clearing it would wipe it.
       setStepImages({});
     } catch (err) {
       if (requestId !== guideRequestIdRef.current) return;
