@@ -21,6 +21,8 @@ interface Props {
   isGeneratingImage: boolean;
   imageFailed: boolean;
   onRetryImage: () => void;
+  /** Explicit: nothing is generated until the reader asks. */
+  onGenerateImage: () => void;
   onImageError: (index: number) => void;
   isCompleted: boolean;
   onToggleComplete: () => void;
@@ -30,8 +32,8 @@ interface Props {
 
 /** Illustration slot: the image, its loading state, or an honest empty state. */
 const StepIllustration: React.FC<
-  Pick<Props, 'step' | 'activeStep' | 'exploringMode' | 'imageUrl' | 'isGeneratingImage' | 'imageFailed' | 'onRetryImage' | 'onImageError'>
-> = ({ step, activeStep, exploringMode, imageUrl, isGeneratingImage, imageFailed, onRetryImage, onImageError }) => {
+  Pick<Props, 'step' | 'activeStep' | 'exploringMode' | 'imageUrl' | 'isGeneratingImage' | 'imageFailed' | 'onRetryImage' | 'onGenerateImage' | 'onImageError'>
+> = ({ step, activeStep, exploringMode, imageUrl, isGeneratingImage, imageFailed, onRetryImage, onGenerateImage, onImageError }) => {
   const expert = exploringMode === ExploringMode.EXPERT;
 
   return (
@@ -50,20 +52,34 @@ const StepIllustration: React.FC<
           <p className="text-[10px] font-black uppercase tracking-[0.5em] animate-pulse">Refining Visual Intelligence</p>
         </div>
       ) : (
-        // This used to spin forever on failure, because the spinner keyed off
-        // the absence of an image rather than whether anything was loading.
+        // Nothing is generated until asked for. Illustrations are billable and
+        // most steps read fine without one, so this is the reader's call.
         <div className="flex flex-col items-center gap-6 text-stone-500 px-10 text-center">
           <div className="text-5xl opacity-40" aria-hidden="true">🖼️</div>
-          <p className="text-[10px] font-black uppercase tracking-[0.4em]">
-            {imageFailed ? 'Visual unavailable for this step' : 'No visual generated'}
-          </p>
-          {imageFailed && (
-            <button
-              onClick={onRetryImage}
-              className="text-amber-500 text-[10px] font-black uppercase tracking-widest underline decoration-2 underline-offset-4 hover:text-amber-400"
-            >
-              Retry
-            </button>
+          {imageFailed ? (
+            <>
+              <p className="text-[10px] font-black uppercase tracking-[0.35em]">
+                Visual unavailable for this step
+              </p>
+              <button
+                onClick={onRetryImage}
+                className="text-amber-500 text-[10px] font-black uppercase tracking-widest underline decoration-2 underline-offset-4 hover:text-amber-400"
+              >
+                Try again
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] max-w-sm leading-relaxed">
+                Not clear from the text? Generate a picture of this step.
+              </p>
+              <button
+                onClick={onGenerateImage}
+                className="bg-white text-stone-900 px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-amber-500 hover:text-white transition-all active:scale-95 shadow-xl"
+              >
+                Show me a picture
+              </button>
+            </>
           )}
         </div>
       )}
@@ -85,6 +101,7 @@ const StepPanel: React.FC<Props> = ({
   isGeneratingImage,
   imageFailed,
   onRetryImage,
+  onGenerateImage,
   onImageError,
   isCompleted,
   onToggleComplete,
@@ -154,6 +171,7 @@ const StepPanel: React.FC<Props> = ({
           isGeneratingImage={isGeneratingImage}
           imageFailed={imageFailed}
           onRetryImage={onRetryImage}
+          onGenerateImage={onGenerateImage}
           onImageError={onImageError}
         />
       </div>

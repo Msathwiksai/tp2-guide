@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CommandOS } from '../../types';
 import { CommandChip } from '../CommandText';
 import { familiarityForCommand, recordEncounter } from '../../services/commandJournal';
+import { usePreferences } from '../../services/preferences';
 
 interface Props {
   commands: string[];
@@ -18,6 +19,7 @@ interface Props {
  */
 const StepCommands: React.FC<Props> = ({ commands, os }) => {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const { trackEncounters } = usePreferences();
 
   // Read once per command list. The journal only changes when the reader
   // explains something elsewhere, so a fresh read on mount is enough.
@@ -30,8 +32,8 @@ const StepCommands: React.FC<Props> = ({ commands, os }) => {
   // familiarity snapshot above, so this render still shows the prior state
   // rather than immediately marking everything as seen.
   useEffect(() => {
-    recordEncounter(os, commands);
-  }, [commands, os]);
+    if (trackEncounters) recordEncounter(os, commands);
+  }, [commands, os, trackEncounters]);
 
   return (
     <div className="mb-10 bg-stone-950 rounded-[2rem] p-8 space-y-5">

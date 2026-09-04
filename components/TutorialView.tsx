@@ -6,6 +6,7 @@ import { AIResponse, Tutorial, ExploringMode, Category } from '../types';
 import PageMeta from './PageMeta';
 import { osForTutorial } from './commandDetection';
 import { knownFlagSummary } from '../services/commandJournal';
+import { usePreferences } from '../services/preferences';
 import TopicPicker from './tutorial/TopicPicker';
 import GuideSidebar from './tutorial/GuideSidebar';
 import StepPanel from './tutorial/StepPanel';
@@ -86,7 +87,10 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
   const exploringMode =
     searchParams.get('mode') === ExploringMode.EXPERT ? ExploringMode.EXPERT : ExploringMode.STANDARD;
   // Opt-in, and in the URL so a tailored guide is still linkable.
-  const tailored = searchParams.get('tailored') === '1';
+  const prefs = usePreferences();
+  // The URL wins when it says either way; the preference only sets the default.
+  const tailorParam = searchParams.get('tailored');
+  const tailored = tailorParam === null ? prefs.tailorByDefault : tailorParam === '1';
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -214,8 +218,8 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
   const toggleTailoring = () => {
     setSearchParams(prev => {
       const params = new URLSearchParams(prev);
-      if (tailored) params.delete('tailored');
-      else params.set('tailored', '1');
+      // Written explicitly either way, so a toggle always overrides the default.
+      params.set('tailored', tailored ? '0' : '1');
       return params;
     });
   };
@@ -333,6 +337,7 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
           isGeneratingImage={stepImage.isGenerating}
           imageFailed={stepImage.failed}
           onRetryImage={stepImage.retry}
+          onGenerateImage={stepImage.generate}
           onImageError={stepImage.handleImageError}
           isCompleted={completedSteps.has(activeStep)}
           onToggleComplete={() => toggleStep(activeStep)}
