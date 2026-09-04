@@ -31,6 +31,28 @@ export interface Tutorial {
   versions: string[]; 
 }
 
+export type CommandOS = 'Windows' | 'macOS' | 'Linux';
+
+/** A token's meaning is always relative to the command it appears in. */
+export interface CommandPart {
+  token: string;
+  kind: 'command' | 'subcommand' | 'flag' | 'value' | 'path' | 'operator';
+  meaning: string;
+}
+
+export interface CommandExplanation {
+  normalized: string;
+  os: string;
+  summary: string;
+  plainEnglish: string;
+  risk: 'safe' | 'caution' | 'destructive';
+  riskNote?: string;
+  parts: CommandPart[];
+  commonFlags: { flag: string; meaning: string }[];
+  examples: { command: string; description: string }[];
+  cautions?: string[];
+}
+
 export interface AIResponse {
   steps: GuideStep[];
   overview: string;

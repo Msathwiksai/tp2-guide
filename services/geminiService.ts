@@ -1,4 +1,4 @@
-import { AIResponse, ExploringMode } from '../types';
+import { AIResponse, CommandExplanation, CommandOS, ExploringMode } from '../types';
 
 type VerifyResponse = { exists: boolean; correctedName?: string; reason?: string };
 
@@ -80,6 +80,13 @@ export async function verifyApplicationExistence(target: string): Promise<Verify
 export async function getGuideContent(target: string, topic: string, version: string, mode: ExploringMode = ExploringMode.STANDARD): Promise<AIResponse> {
   const data = await request<unknown>('/api/guide', { target, topic, version, mode });
   if (!validGuide(data)) throw new Error('The AI returned an incomplete guide. Please try again.');
+  return data;
+}
+export async function explainCommand(command: string, os: CommandOS): Promise<CommandExplanation> {
+  const data = await request<CommandExplanation>('/api/command', { command, os });
+  if (!data || !Array.isArray(data.parts)) {
+    throw new Error('The AI returned an incomplete explanation. Please try again.');
+  }
   return data;
 }
 export async function generateStepImage(app: string, version: string, stepTitle: string, visualCue: string): Promise<string | null> { return (await request<{ image: string | null }>('/api/image', { app, version, stepTitle, visualCue })).image; }
