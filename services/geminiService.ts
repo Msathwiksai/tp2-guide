@@ -90,4 +90,18 @@ export async function explainCommand(command: string, os: CommandOS): Promise<Co
   return data;
 }
 export async function generateStepImage(app: string, version: string, stepTitle: string, visualCue: string): Promise<string | null> { return (await request<{ image: string | null }>('/api/image', { app, version, stepTitle, visualCue })).image; }
-export async function askAIQuestion(context: string, question: string): Promise<string> { return (await request<{ text: string }>('/api/chat', { context, question })).text || "I'm sorry, I couldn't generate an answer right now."; }
+export type ChatTurn = { role: 'user' | 'assistant'; text: string };
+
+/**
+ * `history` is what gives the mentor memory. Without it every question was
+ * answered in isolation, so follow-ups like "explain that again" or "what about
+ * the other flag" had nothing to refer to. The server bounds and sanitises it.
+ */
+export async function askAIQuestion(
+  context: string,
+  question: string,
+  history: ChatTurn[] = [],
+): Promise<string> {
+  const data = await request<{ text: string }>('/api/chat', { context, question, history });
+  return data.text || "I'm sorry, I couldn't generate an answer right now.";
+}

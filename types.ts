@@ -3,6 +3,8 @@ export interface GuideStep {
   title: string;
   description: string;
   tips?: string[];
+  /** Exact runnable commands for this step; each links to the explainer. */
+  commands?: string[];
   actionLabel?: string;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   visualCue?: string;

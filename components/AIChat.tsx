@@ -1,13 +1,19 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { askAIQuestion } from '../services/geminiService';
+import { askAIQuestion, type ChatTurn } from '../services/geminiService';
+import { CommandChip } from './CommandText';
+import { isLikelyCommand, osForTutorial } from './commandDetection';
+import { CommandOS } from '../types';
+
+const toHistory = (messages: Message[]): ChatTurn[] =>
+  messages.map(m => ({ role: m.isUser ? 'user' as const : 'assistant' as const, text: m.text }));
 
 interface Message {
   text: string;
   isUser: boolean;
 }
 
-const RichTextRenderer: React.FC<{ text: string }> = ({ text }) => {
+const RichTextRenderer: React.FC<{ text: string; os: CommandOS }> = ({ text, os }) => {
   const lines = text.split('\n');
   return (
     <div className="space-y-4">
@@ -22,7 +28,7 @@ const RichTextRenderer: React.FC<{ text: string }> = ({ text }) => {
                 <span>💡</span> Elite Optimization
               </div>
               <p className="text-stone-700 text-sm font-semibold leading-relaxed">
-                {renderInline(trimmed.replace(/💡 pro tip:?/gi, '').trim())}
+                {renderInline(trimmed.replace(/💡 pro tip:?/gi, '').trim(), os)}
               </p>
             </div>
           );
@@ -31,7 +37,7 @@ const RichTextRenderer: React.FC<{ text: string }> = ({ text }) => {
         if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
           return (
             <div key={idx} className="font-black text-stone-900 mt-8 mb-2 flex items-center gap-3 text-sm tracking-tight border-b border-amber-100 pb-1">
-              {renderInline(trimmed)}
+              {renderInline(trimmed, os)}
             </div>
           );
         }
@@ -41,28 +47,34 @@ const RichTextRenderer: React.FC<{ text: string }> = ({ text }) => {
             <div key={idx} className="flex gap-4 pl-3 py-1.5 border-l-4 border-amber-200/50 ml-2">
               <span className="text-amber-500 font-black">•</span>
               <span className="text-stone-700 leading-relaxed font-medium text-sm">
-                {renderInline(trimmed.substring(2))}
+                {renderInline(trimmed.substring(2), os)}
               </span>
             </div>
           );
         }
 
-        return <p key={idx} className="text-stone-600 leading-relaxed font-medium text-sm">{renderInline(line)}</p>;
+        return <p key={idx} className="text-stone-600 leading-relaxed font-medium text-sm">{renderInline(line, os)}</p>;
       })}
     </div>
   );
 };
 
-const renderInline = (text: string) => {
+const renderInline = (text: string, os: CommandOS) => {
   const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={i} className="font-black text-stone-950 underline decoration-amber-200/50">{part.slice(2, -2)}</strong>;
     }
     if (part.startsWith('`') && part.endsWith('`')) {
+      const inner = part.slice(1, -1);
+      // The mentor answers questions about OS features, so its replies are full
+      // of commands. Linking them means a follow-up is one click, not a retype.
+      if (isLikelyCommand(inner)) {
+        return <CommandChip key={i} command={inner} os={os} className="mx-1 text-[11px]" />;
+      }
       return (
         <code key={i} className="bg-stone-900 text-amber-400 px-2 py-0.5 rounded-lg font-mono text-[11px] mx-1 border border-stone-800 shadow-inner font-bold">
-          {part.slice(1, -1)}
+          {inner}
         </code>
       );
     }
@@ -84,8 +96,12 @@ const AIChat: React.FC<AIChatProps> = ({ activeContext, externalMessage, onMessa
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Mirrors messages so send handlers read the latest history without taking
+  // a dependency on it (which would recreate them on every message).
+  const messagesRef = useRef<Message[]>([]);
 
   useEffect(() => {
+    messagesRef.current = messages;
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isTyping, state]);
 
@@ -93,7 +109,7 @@ const AIChat: React.FC<AIChatProps> = ({ activeContext, externalMessage, onMessa
     setMessages(prev => [...prev, { text, isUser: true }]);
     setIsTyping(true);
     try {
-      const response = await askAIQuestion(activeContext, text);
+      const response = await askAIQuestion(activeContext, text, toHistory(messagesRef.current));
       setMessages(prev => [...prev, { text: response, isUser: false }]);
     } catch {
       setMessages(prev => [...prev, { text: "Protocol error. Intelligence link unstable.", isUser: false }]);
@@ -137,7 +153,7 @@ const AIChat: React.FC<AIChatProps> = ({ activeContext, externalMessage, onMessa
     setMessages(prev => [...prev, { text: textToSend, isUser: true }]);
     setIsTyping(true);
     try {
-      const response = await askAIQuestion(activeContext, textToSend);
+      const response = await askAIQuestion(activeContext, textToSend, toHistory(messagesRef.current));
       setMessages(prev => [...prev, { text: response, isUser: false }]);
     } catch {
       setMessages(prev => [...prev, { text: "Intelligence link interrupted.", isUser: false }]);
@@ -220,7 +236,7 @@ const AIChat: React.FC<AIChatProps> = ({ activeContext, externalMessage, onMessa
                 <div className={`max-w-[85%] px-6 py-5 rounded-[2.2rem] shadow-sm leading-relaxed ${
                   m.isUser ? 'bg-amber-500 text-stone-950 rounded-tr-none font-bold border border-amber-400 text-sm' : 'bg-white text-stone-700 border border-amber-50 rounded-tl-none'
                 }`}>
-                  {m.isUser ? m.text : <RichTextRenderer text={m.text} />}
+                  {m.isUser ? m.text : <RichTextRenderer text={m.text} os={osForTutorial(activeContext)} />}
                 </div>
               </div>
             ))}

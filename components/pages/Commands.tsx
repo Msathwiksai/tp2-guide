@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { explainCommand, ApiError } from '../../services/geminiService';
 import { CommandExplanation, CommandOS, CommandPart } from '../../types';
 import PageShell, { Card, Section } from './PageShell';
@@ -123,20 +124,31 @@ const Breakdown: React.FC<{ result: CommandExplanation }> = ({ result }) => {
 };
 
 const Commands: React.FC = () => {
-  const [os, setOs] = useState<CommandOS>('Linux');
-  const [input, setInput] = useState('');
+  // ?command= and ?os= let guide steps and chat answers deep-link straight to
+  // an explanation, and make any explanation shareable.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedCommand = searchParams.get('command') || '';
+  const linkedOs = OS_OPTIONS.find(o => o === searchParams.get('os')) || 'Linux';
+
+  const [os, setOs] = useState<CommandOS>(linkedOs);
+  const [input, setInput] = useState(linkedCommand);
   const [result, setResult] = useState<CommandExplanation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
-  const run = async (command: string) => {
+  const run = useCallback(async (command: string, forOs: CommandOS) => {
     const trimmed = command.trim();
-    if (!trimmed || loading) return;
+    if (!trimmed) return;
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     try {
-      setResult(await explainCommand(trimmed, os));
+      const explanation = await explainCommand(trimmed, forOs);
+      if (requestId !== requestIdRef.current) return;
+      setResult(explanation);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setResult(null);
       if (err instanceof ApiError && err.isUpstreamBusy) {
         setError('All AI models are busy right now — this is common on the free tier. Try again in a moment.');
@@ -146,8 +158,39 @@ const Commands: React.FC = () => {
         setError(err instanceof Error ? err.message : 'Could not explain that command.');
       }
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
+  }, []);
+
+  // Mirror the URL into the form during render — the documented pattern for
+  // reacting to an identity change without a cascading second render.
+  const linkKey = `${linkedCommand}|${linkedOs}`;
+  const [syncedLink, setSyncedLink] = useState(linkKey);
+  if (linkKey !== syncedLink) {
+    setSyncedLink(linkKey);
+    setInput(linkedCommand);
+    setOs(linkedOs);
+  }
+
+  // The lookup itself is a genuine side effect — fetching in response to the
+  // URL naming a command — so it stays in an effect. The rule fires because
+  // `run` sets a loading flag before its first await, which is exactly what a
+  // fetch should do; suppressed here rather than contorting the data flow.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (linkedCommand) run(linkedCommand, linkedOs);
+  }, [linkedCommand, linkedOs, run]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  /** Writes to the URL; the effect above performs the lookup. */
+  const submit = (command: string, forOs: CommandOS) => {
+    const trimmed = command.trim();
+    if (!trimmed) return;
+    if (trimmed === linkedCommand && forOs === linkedOs) {
+      run(trimmed, forOs); // Same URL — re-run directly.
+      return;
+    }
+    setSearchParams({ command: trimmed, os: forOs });
   };
 
   return (
@@ -162,7 +205,7 @@ const Commands: React.FC = () => {
           {OS_OPTIONS.map(option => (
             <button
               key={option}
-              onClick={() => setOs(option)}
+              onClick={() => { setOs(option); if (input.trim()) submit(input, option); }}
               aria-pressed={os === option}
               className={`px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all ${
                 os === option ? 'bg-stone-900 text-white shadow-xl' : 'bg-white text-stone-400 border-2 border-amber-50 hover:border-amber-300'
@@ -174,7 +217,7 @@ const Commands: React.FC = () => {
         </div>
 
         <form
-          onSubmit={e => { e.preventDefault(); run(input); }}
+          onSubmit={e => { e.preventDefault(); submit(input, os); }}
           className="relative"
         >
           <label htmlFor="command-input" className="sr-only">Command to explain</label>
@@ -202,7 +245,7 @@ const Commands: React.FC = () => {
           {STARTERS[os].map(sample => (
             <button
               key={sample}
-              onClick={() => { setInput(sample); run(sample); }}
+              onClick={() => { setInput(sample); submit(sample, os); }}
               className="font-mono text-[11px] font-bold px-4 py-2 rounded-xl bg-white border-2 border-amber-50 text-stone-500 hover:border-amber-300 hover:text-stone-900 transition-all"
             >
               {sample}

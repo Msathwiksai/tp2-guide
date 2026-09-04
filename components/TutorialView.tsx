@@ -4,6 +4,7 @@ import { TUTORIALS } from '../constants';
 import { getGuideContent, verifyApplicationExistence, ApiError } from '../services/geminiService';
 import { AIResponse, Tutorial, ExploringMode, Category } from '../types';
 import PageMeta from './PageMeta';
+import { osForTutorial } from './commandDetection';
 import TopicPicker from './tutorial/TopicPicker';
 import GuideSidebar from './tutorial/GuideSidebar';
 import StepPanel from './tutorial/StepPanel';
@@ -297,6 +298,7 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
           activeStep={activeStep}
           totalSteps={guide.steps.length}
           exploringMode={exploringMode}
+          commandOs={osForTutorial(tutorial.name)}
           imageUrl={stepImage.imageUrl}
           isGeneratingImage={stepImage.isGenerating}
           imageFailed={stepImage.failed}

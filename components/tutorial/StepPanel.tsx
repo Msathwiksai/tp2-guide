@@ -1,6 +1,7 @@
 import React from 'react';
-import { ExploringMode, GuideStep } from '../../types';
+import { CommandOS, ExploringMode, GuideStep } from '../../types';
 import StepNarration from '../StepNarration';
+import CommandText, { CommandChip } from '../CommandText';
 
 interface Props {
   step: GuideStep;
@@ -8,6 +9,8 @@ interface Props {
   activeStep: number;
   totalSteps: number;
   exploringMode: ExploringMode;
+  /** Which shell the commands in this guide belong to. */
+  commandOs: CommandOS;
   imageUrl?: string;
   isGeneratingImage: boolean;
   imageFailed: boolean;
@@ -69,6 +72,7 @@ const StepPanel: React.FC<Props> = ({
   activeStep,
   totalSteps,
   exploringMode,
+  commandOs,
   imageUrl,
   isGeneratingImage,
   imageFailed,
@@ -90,7 +94,46 @@ const StepPanel: React.FC<Props> = ({
       </div>
 
       <h1 className="text-6xl md:text-7xl font-black text-stone-900 mb-10 tracking-tighter leading-none">{step.title}</h1>
-      <p className="text-2xl text-stone-500 leading-relaxed mb-10 font-medium">{step.description}</p>
+      {/* Commands inside the description link to the explainer, so a beginner
+          meeting `chmod -R 755` mid-step never has to leave to find out what
+          -R does here. */}
+      <p className="text-2xl text-stone-500 leading-relaxed mb-10 font-medium">
+        <CommandText text={step.description} os={commandOs} />
+      </p>
+
+      {step.commands && step.commands.length > 0 && (
+        // Every command is a link into the explainer, so a beginner can find
+        // out what each flag does here without leaving the step.
+        <div className="mb-10 bg-stone-950 rounded-[2rem] p-8 space-y-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400">
+            Commands in this step — tap any to see what each part does
+          </p>
+          <ul className="space-y-3">
+            {step.commands.map((command, i) => (
+              <li key={i}>
+                <CommandChip command={command} os={commandOs} className="!text-sm !px-4 !py-2" />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {step.tips && step.tips.length > 0 && (
+        // Tips were in the data and fed to the narration, but never rendered.
+        <div className="mb-10 bg-amber-50/40 border-2 border-amber-100 rounded-[2rem] p-8 space-y-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-700">Tips</p>
+          <ul className="space-y-3">
+            {step.tips.map((tip, i) => (
+              <li key={i} className="flex gap-4 items-start">
+                <span className="text-amber-500 font-black flex-shrink-0" aria-hidden="true">•</span>
+                <span className="text-stone-600 font-medium leading-relaxed">
+                  <CommandText text={tip} os={commandOs} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mb-16">
         <StepNarration
