@@ -1,8 +1,9 @@
 import React from 'react';
 import { CommandOS, ExploringMode, GuideStep } from '../../types';
 import StepNarration from '../StepNarration';
-import CommandText, { CommandChip } from '../CommandText';
+import CommandText from '../CommandText';
 import StepVideo from './StepVideo';
+import StepCommands from './StepCommands';
 
 interface Props {
   step: GuideStep;
@@ -109,20 +110,7 @@ const StepPanel: React.FC<Props> = ({
       </p>
 
       {step.commands && step.commands.length > 0 && (
-        // Every command is a link into the explainer, so a beginner can find
-        // out what each flag does here without leaving the step.
-        <div className="mb-10 bg-stone-950 rounded-[2rem] p-8 space-y-5">
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400">
-            Commands in this step — tap any to see what each part does
-          </p>
-          <ul className="space-y-3">
-            {step.commands.map((command, i) => (
-              <li key={i}>
-                <CommandChip command={command} os={commandOs} className="!text-sm !px-4 !py-2" />
-              </li>
-            ))}
-          </ul>
-        </div>
+        <StepCommands commands={step.commands} os={commandOs} />
       )}
 
       {step.tips && step.tips.length > 0 && (

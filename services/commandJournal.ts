@@ -172,6 +172,39 @@ export function recordLookup(explanation: CommandExplanation, os: CommandOS): vo
   writeJournal(journal);
 }
 
+/** Flag-shaped tokens: -r, -rf, --recursive, or Windows-style /s. */
+const FLAG_TOKEN = /^(--?[A-Za-z][\w-]*|\/[A-Za-z]{1,3})$/;
+
+export interface CommandFamiliarity {
+  /** Times this exact command has been explained before. */
+  seenCount: number;
+  /** Present when a full explanation is cached, so no request is needed. */
+  explanation?: CommandExplanation;
+  flags: { flag: string; known: boolean; meaning?: string }[];
+}
+
+/**
+ * What the reader already knows about one command, answered entirely from
+ * local storage. This is what lets a guide skip re-explaining a flag someone
+ * has already met, without a network call.
+ */
+export function familiarityForCommand(os: CommandOS, command: string): CommandFamiliarity {
+  const journal = readJournal();
+  const trimmed = command.trim();
+  const base = baseOf(trimmed);
+  const entry = journal.entries[entryKey(os, trimmed)];
+
+  const flags = trimmed
+    .split(/\s+/)
+    .filter(token => FLAG_TOKEN.test(token))
+    .map(flag => {
+      const known = journal.flags[flagKey(base, flag)];
+      return { flag, known: !!known, meaning: known?.meaning };
+    });
+
+  return { seenCount: entry?.count ?? 0, explanation: entry?.explanation, flags };
+}
+
 export interface JournalStats {
   commands: number;
   lookups: number;
