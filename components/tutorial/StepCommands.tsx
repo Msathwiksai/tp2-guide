@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CommandOS } from '../../types';
 import { CommandChip } from '../CommandText';
-import { familiarityForCommand } from '../../services/commandJournal';
+import { familiarityForCommand, recordEncounter } from '../../services/commandJournal';
 
 interface Props {
   commands: string[];
@@ -25,6 +25,13 @@ const StepCommands: React.FC<Props> = ({ commands, os }) => {
     () => Object.fromEntries(commands.map(c => [c, familiarityForCommand(os, c)])),
     [commands, os],
   );
+
+  // Reading a step counts as meeting its commands — recorded after the
+  // familiarity snapshot above, so this render still shows the prior state
+  // rather than immediately marking everything as seen.
+  useEffect(() => {
+    recordEncounter(os, commands);
+  }, [commands, os]);
 
   return (
     <div className="mb-10 bg-stone-950 rounded-[2rem] p-8 space-y-5">
@@ -52,12 +59,16 @@ const StepCommands: React.FC<Props> = ({ commands, os }) => {
 
               {info.flags.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2 pl-1">
+                  {/* Three states, not two: met-but-never-explained is its own
+                      thing, and must not be mistaken for understood. */}
                   {newFlags.map(f => (
                     <span
                       key={f.flag}
-                      className="text-[9px] font-black uppercase tracking-widest bg-amber-500 text-white px-2.5 py-1 rounded-md"
+                      className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md ${
+                        f.encountered ? 'bg-amber-500/25 text-amber-300' : 'bg-amber-500 text-white'
+                      }`}
                     >
-                      new: {f.flag}
+                      {f.encountered ? `seen, not explained: ${f.flag}` : `new: ${f.flag}`}
                     </span>
                   ))}
                   {knownFlags.map(f => (

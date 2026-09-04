@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageShell, { Card, Section } from './PageShell';
-import { clearJournal, journalStats, readJournal } from '../../services/commandJournal';
+import { clearJournal, encounteredOnly, journalStats, readJournal } from '../../services/commandJournal';
 
 const RISK_DOT: Record<string, string> = {
   safe: 'bg-emerald-500',
@@ -32,6 +32,7 @@ const Journal: React.FC = () => {
   const [query, setQuery] = useState('');
 
   const stats = useMemo(() => journalStats(journal), [journal]);
+  const unexplained = useMemo(() => encounteredOnly(journal), [journal]);
 
   const entries = useMemo(() => {
     const all = Object.values(journal.entries).sort((a, b) => b.lastSeen - a.lastSeen);
@@ -39,7 +40,7 @@ const Journal: React.FC = () => {
     return q ? all.filter(e => e.command.toLowerCase().includes(q) || e.summary.toLowerCase().includes(q)) : all;
   }, [journal, query]);
 
-  const isEmpty = Object.keys(journal.entries).length === 0;
+  const isEmpty = Object.keys(journal.entries).length === 0 && unexplained.length === 0;
 
   return (
     <PageShell
@@ -67,7 +68,7 @@ const Journal: React.FC = () => {
             {[
               { label: 'Commands', value: stats.commands },
               { label: 'Lookups', value: stats.lookups },
-              { label: 'Flags encountered', value: stats.flags },
+              { label: 'Flags explained', value: stats.flags },
             ].map(stat => (
               <Card key={stat.label} className="text-center !p-8">
                 <div className="text-5xl font-black text-stone-900 tracking-tighter">{stat.value}</div>
@@ -91,10 +92,31 @@ const Journal: React.FC = () => {
                     <div className="flex-1">
                       <p className="text-stone-500 font-medium text-sm leading-relaxed">{flag.meaning}</p>
                       <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mt-2">
-                        Checked {flag.count}×
+                        Checked {flag.explainedCount}×
                       </p>
                     </div>
                   </Card>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {unexplained.length > 0 && (
+            <Section title="Met in guides, never explained">
+              <p className="text-stone-400 font-medium text-sm -mt-4 leading-relaxed">
+                Flags you have been shown while reading, but never looked up. These are
+                deliberately not treated as known — being shown something is not the same
+                as understanding it.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {unexplained.slice(0, 24).map(flag => (
+                  <Link
+                    key={`${flag.base}::${flag.flag}`}
+                    to={`/commands?command=${encodeURIComponent(`${flag.base} ${flag.flag}`)}&os=Linux`}
+                    className="font-mono text-[11px] font-bold px-4 py-2 rounded-xl bg-white border-2 border-amber-100 text-stone-500 hover:border-amber-400 hover:text-stone-900 transition-all"
+                  >
+                    {flag.base} {flag.flag}
+                  </Link>
                 ))}
               </div>
             </Section>

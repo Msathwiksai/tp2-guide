@@ -37,13 +37,20 @@ export interface JournalFlag {
   base: string;
   flag: string;
   meaning: string;
-  count: number;
+  /**
+   * Deliberately two counters. Meeting a flag in a guide is not the same as
+   * having had it explained, and only the latter may suppress teaching — if
+   * scrolling past a step counted as understanding, tailoring would hide
+   * explanations for things the reader never actually read.
+   */
+  explainedCount: number;
+  encounteredCount: number;
   firstSeen: number;
   lastSeen: number;
 }
 
 export interface Journal {
-  version: 1;
+  version: 2;
   entries: Record<string, JournalEntry>;
   /**
    * Keyed by `base::flag`, never by flag alone. `-r` means recursive in `rm`
@@ -52,16 +59,39 @@ export interface Journal {
   flags: Record<string, JournalFlag>;
 }
 
-const empty = (): Journal => ({ version: 1, entries: {}, flags: {} });
+const empty = (): Journal => ({ version: 2, entries: {}, flags: {} });
+
+/** v1 tracked a single `count`; everything in it came from an explanation. */
+interface LegacyFlag { base: string; flag: string; meaning: string; count: number; firstSeen: number; lastSeen: number }
+
+function migrate(parsed: { version?: number; entries?: Journal['entries']; flags?: Record<string, LegacyFlag> }): Journal {
+  const flags: Journal['flags'] = {};
+  for (const [key, value] of Object.entries(parsed.flags ?? {})) {
+    flags[key] = {
+      base: value.base,
+      flag: value.flag,
+      meaning: value.meaning,
+      explainedCount: value.count ?? 0,
+      encounteredCount: 0,
+      firstSeen: value.firstSeen,
+      lastSeen: value.lastSeen,
+    };
+  }
+  return { version: 2, entries: parsed.entries ?? {}, flags };
+}
 
 /** localStorage throws outright in some privacy modes, so every access is guarded. */
 export function readJournal(): Journal {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return empty();
-    const parsed = JSON.parse(raw) as Journal;
-    if (parsed?.version !== 1 || !parsed.entries || !parsed.flags) return empty();
-    return parsed;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.entries || !parsed?.flags) return empty();
+    // Upgrade rather than discard: losing someone's record on a schema bump
+    // would be the worst possible outcome for a feature built on history.
+    if (parsed.version === 1) return migrate(parsed);
+    if (parsed.version !== 2) return empty();
+    return parsed as Journal;
   } catch {
     return empty();
   }
@@ -120,7 +150,7 @@ export function familiarityFor(explanation: CommandExplanation): Record<string, 
   const seen: Record<string, number> = {};
   for (const part of explanation.parts) {
     if (part.kind !== 'flag') continue;
-    seen[part.token] = journal.flags[flagKey(base, part.token)]?.count ?? 0;
+    seen[part.token] = journal.flags[flagKey(base, part.token)]?.explainedCount ?? 0;
   }
   return seen;
 }
@@ -154,7 +184,8 @@ export function recordLookup(explanation: CommandExplanation, os: CommandOS): vo
       base,
       flag: part.token,
       meaning: part.meaning,
-      count: (prior?.count ?? 0) + 1,
+      explainedCount: (prior?.explainedCount ?? 0) + 1,
+      encounteredCount: prior?.encounteredCount ?? 0,
       firstSeen: prior?.firstSeen ?? now,
       lastSeen: now,
     };
@@ -175,12 +206,61 @@ export function recordLookup(explanation: CommandExplanation, os: CommandOS): vo
 /** Flag-shaped tokens: -r, -rf, --recursive, or Windows-style /s. */
 const FLAG_TOKEN = /^(--?[A-Za-z][\w-]*|\/[A-Za-z]{1,3})$/;
 
+const flagsIn = (command: string) => command.trim().split(/\s+/).filter(t => FLAG_TOKEN.test(t));
+
+/**
+ * Records that a set of commands was *met* while reading a guide.
+ *
+ * This never marks anything as understood — it only notes that the reader has
+ * been shown it. That distinction is the whole point: it fills the record in
+ * from normal reading without ever pretending someone learned something they
+ * merely scrolled past.
+ */
+export function recordEncounter(os: CommandOS, commands: string[]): void {
+  if (!commands.length) return;
+  const journal = readJournal();
+  const now = Date.now();
+  let changed = false;
+
+  for (const raw of commands) {
+    const command = raw.trim();
+    if (!command) continue;
+    const base = baseOf(command);
+
+    for (const flag of flagsIn(command)) {
+      const key = flagKey(base, flag);
+      const prior = journal.flags[key];
+      // Once explained, an encounter adds nothing worth a write.
+      if (prior?.explainedCount) continue;
+      journal.flags[key] = {
+        base,
+        flag,
+        meaning: prior?.meaning ?? '',
+        explainedCount: 0,
+        encounteredCount: (prior?.encounteredCount ?? 0) + 1,
+        firstSeen: prior?.firstSeen ?? now,
+        lastSeen: now,
+      };
+      changed = true;
+    }
+  }
+
+  if (changed) writeJournal(journal);
+}
+
+/** Flags met in guides but never actually explained — worth learning next. */
+export function encounteredOnly(journal: Journal): JournalFlag[] {
+  return Object.values(journal.flags)
+    .filter(f => f.explainedCount === 0 && f.encounteredCount > 0)
+    .sort((a, b) => b.encounteredCount - a.encounteredCount);
+}
+
 export interface CommandFamiliarity {
   /** Times this exact command has been explained before. */
   seenCount: number;
   /** Present when a full explanation is cached, so no request is needed. */
   explanation?: CommandExplanation;
-  flags: { flag: string; known: boolean; meaning?: string }[];
+  flags: { flag: string; known: boolean; encountered: boolean; meaning?: string }[];
 }
 
 /**
@@ -194,13 +274,17 @@ export function familiarityForCommand(os: CommandOS, command: string): CommandFa
   const base = baseOf(trimmed);
   const entry = journal.entries[entryKey(os, trimmed)];
 
-  const flags = trimmed
-    .split(/\s+/)
-    .filter(token => FLAG_TOKEN.test(token))
-    .map(flag => {
-      const known = journal.flags[flagKey(base, flag)];
-      return { flag, known: !!known, meaning: known?.meaning };
-    });
+  const flags = flagsIn(trimmed).map(flag => {
+    const record = journal.flags[flagKey(base, flag)];
+    return {
+      flag,
+      // Only an actual explanation counts as known; merely meeting a flag in a
+      // guide is reported separately so nothing claims understanding it lacks.
+      known: (record?.explainedCount ?? 0) > 0,
+      encountered: (record?.encounteredCount ?? 0) > 0,
+      meaning: record?.meaning || undefined,
+    };
+  });
 
   return { seenCount: entry?.count ?? 0, explanation: entry?.explanation, flags };
 }
@@ -222,6 +306,8 @@ export function knownFlagSummary(limitBases = 12, limitFlags = 6): KnownFlags[] 
   const byBase = new Map<string, { flag: string; lastSeen: number }[]>();
 
   for (const entry of Object.values(journal.flags)) {
+    // Only what was genuinely explained may suppress teaching.
+    if (entry.explainedCount === 0) continue;
     const list = byBase.get(entry.base) ?? [];
     list.push({ flag: entry.flag, lastSeen: entry.lastSeen });
     byBase.set(entry.base, list);
@@ -252,8 +338,8 @@ export function journalStats(journal: Journal): JournalStats {
   return {
     commands: entries.length,
     lookups: entries.reduce((sum, e) => sum + e.count, 0),
-    flags: flags.length,
-    stillLearning: flags.filter(f => f.count >= 3).sort((a, b) => b.count - a.count).slice(0, 12),
+    flags: flags.filter(f => f.explainedCount > 0).length,
+    stillLearning: flags.filter(f => f.explainedCount >= 3).sort((a, b) => b.explainedCount - a.explainedCount).slice(0, 12),
   };
 }
 
