@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 
 const SITE = 'Tp2 Guide';
 const DEFAULT_DESCRIPTION =
@@ -25,6 +26,8 @@ const PageMeta: React.FC<{ title: string; description?: string }> = ({
   title,
   description = DEFAULT_DESCRIPTION,
 }) => {
+  const { search } = useLocation();
+
   useEffect(() => {
     const full = title === SITE ? `${SITE} — Version-aware software tutorials` : `${title} — ${SITE}`;
     document.title = full;
@@ -42,10 +45,14 @@ const PageMeta: React.FC<{ title: string; description?: string }> = ({
       canonical.rel = 'canonical';
       document.head.appendChild(canonical);
     }
-    canonical.href = window.location.origin + window.location.pathname;
+    // Includes the query string: topic/version/mode live there, so two guides
+    // on the same path are genuinely different pages and need different
+    // canonicals — otherwise they would collapse into one in search results.
+    canonical.href = window.location.origin + window.location.pathname + window.location.search;
 
     setMeta('meta[property="og:url"]', 'property', 'og:url', canonical.href);
-  }, [title, description]);
+    // `search` is a dependency because the canonical/og:url above read it.
+  }, [title, description, search]);
 
   return null;
 };

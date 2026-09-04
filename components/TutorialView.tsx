@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { TUTORIALS } from '../constants';
 import { getGuideContent, verifyApplicationExistence, ApiError } from '../services/geminiService';
 import { AIResponse, Tutorial, ExploringMode, Category } from '../types';
@@ -25,12 +25,21 @@ interface TutorialViewProps {
 }
 
 /**
- * Container for one application's guides. Owns data fetching and decides which
- * screen to show; all rendering lives in ./tutorial/*.
+ * Container for one application's guides.
+ *
+ * The URL is the source of truth for which guide is being read: topic, version
+ * and mode are query parameters, so a guide can be linked, bookmarked and
+ * reloaded. Previously they were component state, which meant a refresh dropped
+ * you back on the topic picker and no guide could be shared.
+ *
+ * Fetching is driven by a single effect watching those parameters, rather than
+ * three call sites each remembering to re-fetch.
  */
 const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const safeId = useMemo(() => {
     try { return decodeURIComponent(id || ''); }
     catch { return null; }
@@ -63,20 +72,29 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
     } as Tutorial;
   }, [id, safeId, customAppInfo]);
 
+  // --- URL-derived state -----------------------------------------------------
+  const selectedTopic = searchParams.get('topic');
+  // Validated against the tutorial's own versions, so a hand-edited or stale
+  // link cannot generate a macOS guide for "Windows 11".
+  const versionParam = searchParams.get('version');
+  const selectedVersion =
+    versionParam && tutorial.versions.includes(versionParam)
+      ? versionParam
+      : tutorial.versions[0] || '';
+  const exploringMode =
+    searchParams.get('mode') === ExploringMode.EXPERT ? ExploringMode.EXPERT : ExploringMode.STANDARD;
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guide, setGuide] = useState<AIResponse | null>(null);
   const [activeStep, setActiveStep] = useState(0);
-  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
-  const [selectedVersion, setSelectedVersion] = useState<string>(tutorial?.versions[0] || '');
-  const [exploringMode, setExploringMode] = useState<ExploringMode>(ExploringMode.STANDARD);
   const [customDoubt, setCustomDoubt] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  // Bumped to re-run the fetch when the URL has not changed (a retry).
+  const [retryNonce, setRetryNonce] = useState(0);
 
   const guideRequestIdRef = useRef(0);
 
-  // Identifies one specific generated guide. Step numbers are only meaningful
-  // within the guide they came from, so both progress and images key off this.
   const guideKey = selectedTopic
     ? `tp2:progress:${id}:${selectedTopic}:${selectedVersion}:${exploringMode}`
     : null;
@@ -89,6 +107,26 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
     version: selectedVersion,
     guideKey,
   });
+
+  /** Writes guide selection to the URL; the fetch effect reacts to it. */
+  const updateGuideParams = useCallback(
+    (next: { topic?: string | null; version?: string; mode?: ExploringMode }) => {
+      setSearchParams(
+        prev => {
+          const params = new URLSearchParams(prev);
+          if ('topic' in next) {
+            if (next.topic) params.set('topic', next.topic);
+            else params.delete('topic');
+          }
+          if (next.version) params.set('version', next.version);
+          if (next.mode) params.set('mode', next.mode);
+          return params;
+        },
+        { replace: false },
+      );
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
     const isStatic = TUTORIALS.some(t => t.id === id);
@@ -120,49 +158,50 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
     }
   }, [id, safeId]);
 
-  const loadTopic = async (topic: string, versionOverride?: string, modeOverride?: ExploringMode) => {
-    if (!tutorial || verificationError) return;
-    const version = versionOverride || selectedVersion;
-    const mode = modeOverride || exploringMode;
-    // Guards against an earlier, slower request overwriting a newer one.
+  // Single fetch path: whenever the URL names a guide, load it.
+  useEffect(() => {
+    if (!selectedTopic || verificationError || isVerifying) return;
+
     const requestId = ++guideRequestIdRef.current;
-    try {
-      setLoading(true);
-      setError(null);
-      setQuotaError(false);
-      setBusyError(false);
-      setSelectedTopic(topic);
-      const content = await getGuideContent(tutorial.name, topic, version, mode);
-      if (requestId !== guideRequestIdRef.current) return;
-      setGuide(content);
-      setActiveStep(0);
-    } catch (err) {
-      if (requestId !== guideRequestIdRef.current) return;
-      if (err instanceof ApiError && err.isUnavailable) setSetupNeeded(true);
-      else if (err instanceof ApiError && err.isUpstreamBusy) setBusyError(true);
-      else if (err instanceof ApiError && err.isRateLimited) setQuotaError(true);
-      else setError(err instanceof Error ? err.message : 'Failed to load topic details. Please try again.');
-    } finally {
-      if (requestId === guideRequestIdRef.current) setLoading(false);
-    }
-  };
+    let cancelled = false;
 
-  const handleVersionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newVersion = e.target.value;
-    setSelectedVersion(newVersion);
-    if (selectedTopic) loadTopic(selectedTopic, newVersion);
-  };
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        setQuotaError(false);
+        setBusyError(false);
+        const content = await getGuideContent(tutorial.name, selectedTopic, selectedVersion, exploringMode);
+        // Guards against an earlier, slower request overwriting a newer one.
+        if (cancelled || requestId !== guideRequestIdRef.current) return;
+        setGuide(content);
+        setActiveStep(0);
+      } catch (err) {
+        if (cancelled || requestId !== guideRequestIdRef.current) return;
+        if (err instanceof ApiError && err.isUnavailable) setSetupNeeded(true);
+        else if (err instanceof ApiError && err.isUpstreamBusy) setBusyError(true);
+        else if (err instanceof ApiError && err.isRateLimited) setQuotaError(true);
+        else setError(err instanceof Error ? err.message : 'Failed to load topic details. Please try again.');
+      } finally {
+        if (!cancelled && requestId === guideRequestIdRef.current) setLoading(false);
+      }
+    })();
 
-  const toggleExploringMode = () => {
-    const newMode = exploringMode === ExploringMode.STANDARD ? ExploringMode.EXPERT : ExploringMode.STANDARD;
-    setExploringMode(newMode);
-    if (selectedTopic) loadTopic(selectedTopic, selectedVersion, newMode);
-  };
+    return () => { cancelled = true; };
+  }, [selectedTopic, selectedVersion, exploringMode, tutorial.name, verificationError, isVerifying, retryNonce]);
+
+  const handleVersionChange = (e: React.ChangeEvent<HTMLSelectElement>) =>
+    updateGuideParams({ version: e.target.value });
+
+  const toggleExploringMode = () =>
+    updateGuideParams({
+      mode: exploringMode === ExploringMode.STANDARD ? ExploringMode.EXPERT : ExploringMode.STANDARD,
+    });
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      loadTopic(searchQuery.trim());
+      updateGuideParams({ topic: searchQuery.trim(), version: selectedVersion, mode: exploringMode });
       setSearchQuery('');
     }
   };
@@ -174,8 +213,11 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
     setCustomDoubt('');
   };
 
-  const retryCurrentTopic = () => { if (selectedTopic) loadTopic(selectedTopic); };
-  const backToTopics = () => setSelectedTopic(null);
+  const retryCurrentTopic = () => setRetryNonce(n => n + 1);
+  const backToTopics = () => {
+    setGuide(null);
+    updateGuideParams({ topic: null });
+  };
 
   // Ordered by specificity: the most actionable diagnosis wins.
   if (busyError) {
@@ -193,8 +235,6 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
   if (verificationError) {
     return <InvalidTarget target={safeId || 'this application'} reason={verificationError} onHome={() => navigate('/')} />;
   }
-  // Must come before the topic-picker guard: loadTopic sets selectedTopic before
-  // awaiting, so a failure would otherwise fall through and swallow the message.
   if (error) {
     return (
       <GuideError
@@ -205,7 +245,7 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
     );
   }
 
-  if (!selectedTopic && !loading) {
+  if (!selectedTopic) {
     return (
       <TopicPicker
         tutorial={tutorial}
@@ -216,14 +256,13 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
         onSearchSubmit={handleSearchSubmit}
         onVersionChange={handleVersionChange}
         onToggleMode={toggleExploringMode}
-        onSelectTopic={loadTopic}
+        onSelectTopic={topic => updateGuideParams({ topic, version: selectedVersion, mode: exploringMode })}
         onBackHome={() => navigate('/')}
       />
     );
   }
 
-  if (loading) return <GeneratingGuide exploringMode={exploringMode} />;
-  if (!guide || !selectedTopic) return null;
+  if (loading || !guide) return <GeneratingGuide exploringMode={exploringMode} />;
 
   const currentStep = guide.steps[activeStep];
   if (!currentStep) return null;

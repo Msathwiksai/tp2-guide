@@ -7,12 +7,14 @@ import { useLocation } from 'react-router-dom';
  * Resets to the top whenever the path changes (not on search/hash-only edits).
  */
 const ScrollToTop: React.FC = () => {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
 
   useEffect(() => {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     window.scrollTo({ top: 0, left: 0, behavior: reduced ? 'auto' : 'smooth' });
-  }, [pathname]);
+    // `search` matters too: a guide's topic/version/mode live in the query, so
+    // switching guides changes only the query and should still start at the top.
+  }, [pathname, search]);
 
   return null;
 };
