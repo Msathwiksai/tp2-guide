@@ -89,6 +89,34 @@ export async function explainCommand(command: string, os: CommandOS): Promise<Co
   }
   return data;
 }
+export type Capabilities = { ai: boolean; images: boolean; video: boolean };
+
+/** Lets the UI hide features this deployment cannot perform. */
+export async function getCapabilities(): Promise<Capabilities> {
+  try {
+    const response = await fetch('/api/capabilities');
+    if (!response.ok) throw new Error('unavailable');
+    return await response.json();
+  } catch {
+    return { ai: false, images: false, video: false };
+  }
+}
+
+export type VideoJob = { status: 'pending' | 'ready' | 'failed'; videoUrl?: string; error?: string };
+
+/** Starts a Veo job. Generation takes minutes, so this only returns a job id. */
+export async function startStepVideo(app: string, stepTitle: string, description: string): Promise<string> {
+  const data = await request<{ jobId: string }>('/api/video', { app, stepTitle, description });
+  return data.jobId;
+}
+
+export async function pollStepVideo(jobId: string): Promise<VideoJob> {
+  const response = await fetch(`/api/video/${encodeURIComponent(jobId)}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new ApiError(data.error || 'Could not check the video job.', response.status, data.code);
+  return data as VideoJob;
+}
+
 export async function generateStepImage(app: string, version: string, stepTitle: string, visualCue: string): Promise<string | null> { return (await request<{ image: string | null }>('/api/image', { app, version, stepTitle, visualCue })).image; }
 export type ChatTurn = { role: 'user' | 'assistant'; text: string };
 

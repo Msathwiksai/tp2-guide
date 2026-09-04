@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { TUTORIALS } from '../constants';
-import { getGuideContent, verifyApplicationExistence, ApiError } from '../services/geminiService';
+import { getGuideContent, verifyApplicationExistence, getCapabilities, ApiError } from '../services/geminiService';
 import { AIResponse, Tutorial, ExploringMode, Category } from '../types';
 import PageMeta from './PageMeta';
 import { osForTutorial } from './commandDetection';
@@ -93,6 +93,8 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
   const [searchQuery, setSearchQuery] = useState('');
   // Bumped to re-run the fetch when the URL has not changed (a retry).
   const [retryNonce, setRetryNonce] = useState(0);
+  // Asked once: the video button is hidden unless the server can actually do it.
+  const [videoEnabled, setVideoEnabled] = useState(false);
 
   const guideRequestIdRef = useRef(0);
 
@@ -128,6 +130,12 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
     },
     [setSearchParams],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    getCapabilities().then(caps => { if (!cancelled) setVideoEnabled(caps.video); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const isStatic = TUTORIALS.some(t => t.id === id);
@@ -299,6 +307,8 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
           totalSteps={guide.steps.length}
           exploringMode={exploringMode}
           commandOs={osForTutorial(tutorial.name)}
+          appName={tutorial.name}
+          videoEnabled={videoEnabled}
           imageUrl={stepImage.imageUrl}
           isGeneratingImage={stepImage.isGenerating}
           imageFailed={stepImage.failed}

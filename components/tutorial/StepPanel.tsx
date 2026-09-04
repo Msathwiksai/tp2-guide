@@ -2,6 +2,7 @@ import React from 'react';
 import { CommandOS, ExploringMode, GuideStep } from '../../types';
 import StepNarration from '../StepNarration';
 import CommandText, { CommandChip } from '../CommandText';
+import StepVideo from './StepVideo';
 
 interface Props {
   step: GuideStep;
@@ -11,6 +12,10 @@ interface Props {
   exploringMode: ExploringMode;
   /** Which shell the commands in this guide belong to. */
   commandOs: CommandOS;
+  /** App name, for the video prompt. */
+  appName: string;
+  /** Server reports whether Veo is configured; hides the button otherwise. */
+  videoEnabled: boolean;
   imageUrl?: string;
   isGeneratingImage: boolean;
   imageFailed: boolean;
@@ -73,6 +78,8 @@ const StepPanel: React.FC<Props> = ({
   totalSteps,
   exploringMode,
   commandOs,
+  appName,
+  videoEnabled,
   imageUrl,
   isGeneratingImage,
   imageFailed,
@@ -143,6 +150,12 @@ const StepPanel: React.FC<Props> = ({
           tips={step.tips}
         />
       </div>
+
+      {videoEnabled && (
+        <div className="mb-16">
+          <StepVideo appName={appName} stepTitle={step.title} description={step.description} stepKey={stepKey} />
+        </div>
+      )}
 
       <div className="relative mb-16">
         <StepIllustration

@@ -92,6 +92,28 @@ means rewriting one file.
 | `API_PORT` | `3001` | Port for the API server. |
 | `API_ORIGIN` | `http://localhost:3001` | Origin Vite proxies `/api` to in development. |
 | `GEMINI_MODELS` | `gemini-3.6-flash,…` | Comma-separated model fallback list. |
+| `RATE_LIMIT_PER_MIN` | `8` | Requests per minute per IP against the AI routes. |
+| `ENABLE_VIDEO` | `false` | Turns on Veo step videos. **Billable — see below.** |
+| `VEO_MODEL` | `veo-3.1-fast-generate-preview` | Which Veo model to use. |
+
+### Video generation
+
+Off by default. Veo has **no free tier**, so a free-tier key returns `429` on
+every request — the button would fail for everyone. Enable it only with billing
+turned on:
+
+```
+ENABLE_VIDEO=true
+```
+
+The UI asks `/api/capabilities` on load and hides the control entirely when the
+server cannot do it, rather than offering a button that always fails.
+
+Two things worth knowing before you turn it on: generation takes **minutes** per
+clip (started, polled, then served across three requests), and Veo *imagines* an
+interface rather than recording the real one. The result is labelled as an
+illustration for that reason — for a guide whose value is version-accuracy, a
+plausible-but-invented UI can mislead more than it helps.
 
 ## Notes on the free tier
 
