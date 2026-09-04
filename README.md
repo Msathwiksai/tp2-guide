@@ -95,8 +95,11 @@ means rewriting one file.
 | `TEXT_PROVIDER` | `gemini` | `gemini` or `openai` (any OpenAI-compatible endpoint). |
 | `OPENAI_BASE_URL` | NVIDIA NIM | Base URL when `TEXT_PROVIDER=openai`. |
 | `OPENAI_API_KEY` | — | Key for that endpoint. |
-| `OPENAI_MODELS` | `moonshotai/kimi-k3` | Comma-separated fallback list. |
+| `OPENAI_MODELS` | `nvidia/nemotron-3-super-120b-a12b,…` | Comma-separated fallback list. |
 | `OPENAI_JSON_MODE` | `schema` | `schema` (json_schema) or `object` (json_object). |
+| `OPENAI_MAX_TOKENS` | `12000` | Output ceiling. Too low truncates a guide into unparseable JSON. |
+| `UPSTREAM_TIMEOUT_MS` | `45000` | How long to wait on one model before falling through to the next. |
+| `OPENAI_EXTRA_BODY` | — | JSON merged into the request body, for provider-specific settings. |
 | `RATE_LIMIT_PER_MIN` | `8` | Requests per minute per IP against the AI routes. |
 | `ENABLE_VIDEO` | `false` | Turns on Veo step videos. **Billable — see below.** |
 | `VEO_MODEL` | `veo-3.1-fast-generate-preview` | Which Veo model to use. |
@@ -112,13 +115,39 @@ instead — no frontend changes:
 TEXT_PROVIDER=openai
 OPENAI_BASE_URL=https://integrate.api.nvidia.com/v1
 OPENAI_API_KEY=nvapi-...
-OPENAI_MODELS=moonshotai/kimi-k3,meta/llama-3.3-70b-instruct
+OPENAI_MODELS=nvidia/nemotron-3-super-120b-a12b,openai/gpt-oss-20b
+OPENAI_EXTRA_BODY={"chat_template_kwargs":{"thinking":false}}
 ```
 
 NVIDIA NIM's free tier allows roughly **40 requests/minute** against Gemini's
 ~10. Groq, OpenRouter, Together and a local Ollama work identically — only the
 base URL, key and model names change. `OPENAI_MODELS` is comma-separated and
 gets the same fall-through-on-busy behaviour as `GEMINI_MODELS`.
+
+### Choosing a model
+
+Pick by **throughput**, not by reputation. A guide is several thousand output
+tokens, so tokens/sec decides whether it arrives before the client gives up at
+120s. Measured against the same free NVIDIA endpoint, same prompt:
+
+| Model | Throughput | Full guide |
+|---|---|---|
+| `nvidia/nemotron-3-super-120b-a12b` | ~110 tok/s | **16–22s** |
+| `openai/gpt-oss-20b` | ~26 tok/s | timed out at 150s |
+| `moonshotai/kimi-k3` | queued | a 16-token reply took over 2 minutes |
+
+For comparison, Gemini 3.6 Flash produced the same guide in ~20s, after being
+rate-limited on the first attempt and falling through to a second model.
+
+Two things to watch:
+
+- **Model names go stale.** `meta/llama-3.3-70b-instruct` now returns `410
+  Gone`, which silently left the deployment with no fallback at all. Check a
+  candidate against `GET {OPENAI_BASE_URL}/models` before adding it.
+- **Reasoning models spend output budget thinking**, and that scratchpad counts
+  against `OPENAI_MAX_TOKENS` — enough to truncate a guide mid-JSON. Turn it off
+  through `OPENAI_EXTRA_BODY`; the spelling is provider-specific, which is why
+  it is opaque config rather than a first-class field.
 
 Two caveats:
 

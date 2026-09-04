@@ -142,9 +142,16 @@ const TEXT_MODELS = (process.env.GEMINI_MODELS || 'gemini-3.6-flash,gemini-3-fla
 const isRetryable = (error) => {
   const status = error?.status ?? error?.cause?.status;
   const code = error?.cause?.code ?? error?.code;
+  // 408/502/504 are gateway timeouts — the model was queued behind other
+  // traffic and the provider's edge gave up. That is the clearest possible
+  // signal to move to the next model, but it used to fall through as a generic
+  // 500 ("The request could not be completed"), which told the reader nothing
+  // and skipped the fallback list entirely.
   return status === 503 || status === 429 || status === 500 ||
+    status === 502 || status === 504 || status === 408 ||
     code === 'UND_ERR_HEADERS_TIMEOUT' || code === 'UND_ERR_CONNECT_TIMEOUT' ||
-    /high demand|UNAVAILABLE|fetch failed/i.test(error?.message ?? '');
+    code === 'ETIMEDOUT' || code === 'ECONNRESET' ||
+    /high demand|UNAVAILABLE|fetch failed|timed out/i.test(error?.message ?? '');
 };
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -163,12 +170,57 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
  */
 const TEXT_PROVIDER = (process.env.TEXT_PROVIDER || 'gemini').toLowerCase();
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/$/, '');
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+// Providers show the key inside an example Authorization header, so it is
+// commonly pasted as "Bearer nvapi-…". Stripping it here beats failing with an
+// opaque 401 that gives no hint what is wrong.
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.replace(/^\s*Bearer\s+/i, '').trim() || undefined;
 // json_schema constrains generation the way Gemini's responseSchema does, but
 // not every model accepts it; json_object is the safe fallback.
 const OPENAI_JSON_MODE = (process.env.OPENAI_JSON_MODE || 'schema').toLowerCase();
-const OPENAI_MODELS = (process.env.OPENAI_MODELS || 'moonshotai/kimi-k3')
+// Measured on NVIDIA's free tier: Nemotron sustains ~110 tokens/sec against
+// gpt-oss-20b's ~26 and Kimi K3's queue, which stretched even a 16-token reply
+// past two minutes. Throughput is what a guide is bound by, so it leads.
+const OPENAI_MODELS = (process.env.OPENAI_MODELS || 'nvidia/nemotron-3-super-120b-a12b,openai/gpt-oss-20b')
   .split(',').map(m => m.trim()).filter(Boolean);
+// How long to wait on one model before giving up on it and trying the next.
+// Free endpoints queue requests behind paying traffic, and a queued model can
+// sit for minutes — longer than the browser's own 120s ceiling, so without this
+// the reader saw a timeout while the server was still politely waiting on a
+// model that was never going to answer in time. Budget for the whole fallback
+// list, not one model.
+const UPSTREAM_TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 45_000);
+// A full guide — overview, steps with commands, shortcuts, checklist, FAQs —
+// does not fit in the 4096 this used to hardcode, and reasoning models spend
+// part of the budget thinking before they emit any JSON at all. Overrunning
+// truncates the object mid-string, so the failure arrived as an opaque JSON
+// parse error rather than anything that named the cause. The Gemini path sets
+// no ceiling, so this kept the two providers artificially unequal.
+const OPENAI_MAX_TOKENS = Number(process.env.OPENAI_MAX_TOKENS || 12_000);
+/**
+ * Extra JSON merged into the chat-completions body, for provider-specific knobs
+ * the OpenAI protocol has no place for.
+ *
+ * The case that forced it: reasoning models spend output budget thinking before
+ * they write anything, and that scratchpad counts against `max_tokens`, so a
+ * guide gets truncated by the model's own deliberation. NVIDIA's Nemotron turns
+ * it off with `{"chat_template_kwargs":{"thinking":false}}` — measured here at
+ * ~2400 characters of reasoning saved per call. Kept as opaque config rather
+ * than a hardcoded field, because the spelling differs per provider and a
+ * wrong one is rejected outright.
+ */
+const OPENAI_EXTRA_BODY = (() => {
+  const raw = process.env.OPENAI_EXTRA_BODY;
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+    return parsed;
+  } catch (error) {
+    // Silently ignoring this would look like the setting had no effect.
+    console.warn(`[warn] OPENAI_EXTRA_BODY is not a JSON object and was ignored: ${error.message}`);
+    return {};
+  }
+})();
 
 async function generateGemini({ prompt, schema, model }) {
   const response = await ai.models.generateContent({
@@ -235,20 +287,32 @@ async function generateOpenAICompatible({ prompt, schema, model }) {
       ? { type: 'json_schema', json_schema: { name: 'response', strict: true, schema: toJsonSchema(schema) } }
       : { type: 'json_object' };
 
-  const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.7,
-      max_tokens: 4096,
-      ...(responseFormat ? { response_format: responseFormat } : {}),
-    }),
-  });
+  let response;
+  try {
+    response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.7,
+        max_tokens: OPENAI_MAX_TOKENS,
+        ...(responseFormat ? { response_format: responseFormat } : {}),
+        ...OPENAI_EXTRA_BODY,
+      }),
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+  } catch (error) {
+    // Reported as a timeout rather than rethrown as-is, so the retry check
+    // recognises it and the next model gets a turn.
+    const timedOut = new Error(`${model} timed out after ${UPSTREAM_TIMEOUT_MS}ms.`);
+    timedOut.status = 504;
+    timedOut.cause = error;
+    throw timedOut;
+  }
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
@@ -258,7 +322,18 @@ async function generateOpenAICompatible({ prompt, schema, model }) {
   }
 
   const data = await response.json();
-  const text = data?.choices?.[0]?.message?.content ?? '';
+  const choice = data?.choices?.[0];
+  // Hitting the ceiling means the JSON is cut off mid-value, so parsing it
+  // downstream fails with a position offset that names nothing. Say what
+  // actually happened, and retry: another model may be terser, or reason less.
+  if (choice?.finish_reason === 'length') {
+    const truncated = new Error(`${model} hit the ${OPENAI_MAX_TOKENS}-token output limit; the response was cut off. Raise OPENAI_MAX_TOKENS.`);
+    truncated.status = 502;
+    throw truncated;
+  }
+  // Reasoning models put their scratchpad in `reasoning_content` and the answer
+  // in `content`. Reading `content` keeps the thinking out of the JSON.
+  const text = choice?.message?.content ?? '';
   // Strip a ```json fence if the model added one anyway.
   return text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
 }
@@ -312,6 +387,10 @@ function normaliseKnown(raw) {
     .sort((a, b) => a.base.localeCompare(b.base));
 }
 
+// Cached output is specific to the model that produced it, so switching
+// provider or model must not serve the previous one's results.
+const providerTag = () => (TEXT_PROVIDER === 'openai' ? `openai:${OPENAI_MODELS[0]}` : `gemini:${TEXT_MODELS[0]}`);
+
 const knownSignature = (known) =>
   known.map(k => `${k.base}:${k.flags.join(',')}`).join('|');
 
@@ -334,7 +413,7 @@ app.post('/api/guide', async (req, res, next) => {
     const known = req.body.tailor ? normaliseKnown(req.body.known) : [];
     const signature = knownSignature(known);
 
-    const cacheKey = `v3::${target}::${topic}::${version}::${mode}::${signature}`.toLowerCase();
+    const cacheKey = `v3::${providerTag()}::${target}::${topic}::${version}::${mode}::${signature}`.toLowerCase();
     const cached = cacheGet(cacheKey);
     if (cached) { res.set('X-Cache', 'HIT'); return res.json(cached); }
     res.set('X-Cache', 'MISS');
@@ -464,7 +543,7 @@ app.post('/api/command', async (req, res, next) => {
   try {
     const command = requireText(req.body.command, 'Command', 400);
     const os = ['Windows', 'macOS', 'Linux'].includes(req.body.os) ? req.body.os : 'Linux';
-    const cacheKey = `cmd::${os}::${command}`.toLowerCase();
+    const cacheKey = `cmd::${providerTag()}::${os}::${command}`.toLowerCase();
     const cached = cacheGet(cacheKey);
     if (cached) { res.set('X-Cache', 'HIT'); return res.json(cached); }
     res.set('X-Cache', 'MISS');
