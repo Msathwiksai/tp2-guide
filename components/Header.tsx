@@ -28,6 +28,7 @@ const Header: React.FC<HeaderProps> = ({ onHome, onGetStarted }) => {
           <button onClick={onHome} className="text-stone-500 hover:text-amber-600 font-bold text-[10px] uppercase tracking-[0.2em] transition-colors">Explorer</button>
           <NavLink to="/tips" className={navLinkClass}>Tips</NavLink>
           <NavLink to="/commands" className={navLinkClass}>Commands</NavLink>
+          <NavLink to="/journal" className={navLinkClass}>Journal</NavLink>
           <NavLink to="/docs" className={navLinkClass}>Docs</NavLink>
           <NavLink to="/community" className={navLinkClass}>Community</NavLink>
           <div className="h-4 w-[1px] bg-amber-100"></div>

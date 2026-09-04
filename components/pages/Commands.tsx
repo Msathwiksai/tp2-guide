@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { explainCommand, ApiError } from '../../services/geminiService';
 import { CommandExplanation, CommandOS, CommandPart } from '../../types';
 import PageShell, { Card, Section } from './PageShell';
+import { baseOf, familiarityFor, getSavedExplanation, recordLookup } from '../../services/commandJournal';
 
 const OS_OPTIONS: CommandOS[] = ['Linux', 'macOS', 'Windows'];
 
@@ -29,7 +30,11 @@ const RISK_STYLES = {
   destructive: { badge: 'bg-red-600', label: 'Destructive', icon: '🛑' },
 } as const;
 
-const Breakdown: React.FC<{ result: CommandExplanation }> = ({ result }) => {
+const Breakdown: React.FC<{
+  result: CommandExplanation;
+  /** Times each flag was seen before this lookup; drives the familiarity badge. */
+  familiarity: Record<string, number>;
+}> = ({ result, familiarity }) => {
   const risk = RISK_STYLES[result.risk] ?? RISK_STYLES.caution;
 
   return (
@@ -59,6 +64,7 @@ const Breakdown: React.FC<{ result: CommandExplanation }> = ({ result }) => {
           <div className="space-y-4">
             {result.parts.map((part, i) => {
               const style = KIND_STYLES[part.kind] ?? KIND_STYLES.value;
+              const seen = part.kind === 'flag' ? familiarity[part.token] ?? 0 : undefined;
               return (
                 <Card key={i} className="!p-6 flex flex-col sm:flex-row gap-6 items-start hover:border-amber-200 transition-colors">
                   <div className="flex items-center gap-3 sm:w-64 flex-shrink-0">
@@ -67,7 +73,23 @@ const Breakdown: React.FC<{ result: CommandExplanation }> = ({ result }) => {
                     </code>
                     <span className="text-[9px] font-black uppercase tracking-widest text-stone-400">{style.label}</span>
                   </div>
-                  <p className="text-stone-600 font-medium leading-relaxed flex-1">{part.meaning}</p>
+                  <div className="flex-1 space-y-2">
+                    <p className="text-stone-600 font-medium leading-relaxed">{part.meaning}</p>
+                    {/* The journal only knows flags per command, so "seen before"
+                        means seen in THIS command — -r in rm says nothing about
+                        -r in sort. */}
+                    {seen !== undefined && (
+                      <span className={`inline-block text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${
+                        seen === 0
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-stone-100 text-stone-500 border border-stone-200'
+                      }`}>
+                        {seen === 0
+                          ? 'New to you'
+                          : `Seen ${seen}× before with ${baseOf(result.normalized)}`}
+                      </span>
+                    )}
+                  </div>
                 </Card>
               );
             })}
@@ -135,17 +157,41 @@ const Commands: React.FC = () => {
   const [result, setResult] = useState<CommandExplanation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [familiarity, setFamiliarity] = useState<Record<string, number>>({});
+  // Non-null when the shown result came from the journal rather than the API.
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const requestIdRef = useRef(0);
 
-  const run = useCallback(async (command: string, forOs: CommandOS) => {
+  const run = useCallback(async (command: string, forOs: CommandOS, forceRefresh = false) => {
     const trimmed = command.trim();
     if (!trimmed) return;
     const requestId = ++requestIdRef.current;
+
+    // Answer from the journal when we already have it: instant, free, offline,
+    // and it keeps repeat lookups from burning the rate limit.
+    if (!forceRefresh) {
+      const saved = getSavedExplanation(forOs, trimmed);
+      if (saved) {
+        setFamiliarity(familiarityFor(saved.explanation));
+        recordLookup(saved.explanation, forOs);
+        setResult(saved.explanation);
+        setSavedAt(saved.savedAt);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+    }
+
+    setSavedAt(null);
     setLoading(true);
     setError(null);
     try {
       const explanation = await explainCommand(trimmed, forOs);
       if (requestId !== requestIdRef.current) return;
+      // Read familiarity BEFORE recording, or this lookup would mark its own
+      // flags as already known and nothing would ever show as new.
+      setFamiliarity(familiarityFor(explanation));
+      recordLookup(explanation, forOs);
       setResult(explanation);
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
@@ -273,7 +319,25 @@ const Commands: React.FC = () => {
         </Card>
       )}
 
-      {result && !loading && <Breakdown result={result} />}
+      {result && !loading && (
+        <>
+          {savedAt !== null && (
+            <Card className="!p-5 flex flex-wrap items-center gap-4 bg-emerald-50/50 border-emerald-100">
+              <span className="text-lg" aria-hidden="true">💾</span>
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 mr-auto">
+                From your journal — no request made
+              </p>
+              <button
+                onClick={() => run(input, os, true)}
+                className="bg-white text-stone-500 px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] border-2 border-stone-200 hover:border-amber-400 hover:text-stone-900 transition-all"
+              >
+                Regenerate
+              </button>
+            </Card>
+          )}
+          <Breakdown result={result} familiarity={familiarity} />
+        </>
+      )}
 
       {!result && !loading && !error && (
         <Card className="text-center py-20">

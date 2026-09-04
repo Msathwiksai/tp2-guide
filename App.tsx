@@ -13,6 +13,7 @@ const Insights = lazy(() => import('./components/pages/Insights'));
 const Legal = lazy(() => import('./components/pages/Legal'));
 const NotFound = lazy(() => import('./components/pages/NotFound'));
 const Commands = lazy(() => import('./components/pages/Commands'));
+const Journal = lazy(() => import('./components/pages/Journal'));
 import ScrollToTop from './components/ScrollToTop';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Tutorial } from './types';
@@ -104,6 +105,7 @@ const App: React.FC = () => {
           <Route path="/docs" element={<Docs />} />
           <Route path="/api" element={<ApiDocs />} />
           <Route path="/commands" element={<Commands />} />
+          <Route path="/journal" element={<Journal />} />
           <Route path="/community" element={<Community onAskDoubt={askAIDoubt} />} />
           <Route path="/insights" element={<Insights />} />
           <Route path="/legal" element={<Legal />} />
@@ -164,6 +166,7 @@ const App: React.FC = () => {
             <ul className="space-y-4 text-xs font-black uppercase tracking-widest text-white/50">
               <li><Link to="/docs" className="hover:text-amber-400 transition-colors">Documentation</Link></li>
               <li><Link to="/commands" className="hover:text-amber-400 transition-colors">Command Explainer</Link></li>
+              <li><Link to="/journal" className="hover:text-amber-400 transition-colors">Command Journal</Link></li>
               <li><Link to="/api" className="hover:text-amber-400 transition-colors">Elite API</Link></li>
               <li><Link to="/insights" className="hover:text-amber-400 transition-colors">Insights</Link></li>
             </ul>

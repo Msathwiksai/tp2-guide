@@ -376,6 +376,7 @@ const STATIC_PAGES = {
   '/docs': ['Documentation', 'How Tp2 Guide generates instruction, what the controls do, and where the limits are.'],
   '/api': ['API', 'The same endpoints the app itself uses. JSON in, JSON out, rate limited per IP.'],
   '/commands': ['Command Explainer', 'Paste any terminal command and get a plain-English breakdown of every flag, with safe examples.'],
+  '/journal': ['Command Journal', 'Every command you have looked up, kept on your device, so explanations stop re-teaching what you already know.'],
   '/community': ['Community', 'Where to get help, how to ask well, and the ground rules that keep generated guidance trustworthy.'],
   '/insights': ['Insights', 'Short pieces on why software instruction goes stale, and how to read generated guidance well.'],
   '/legal': ['Legal Terms', 'What this service is, what it sends, and what it does not promise.'],
