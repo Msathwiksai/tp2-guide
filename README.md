@@ -95,7 +95,8 @@ means rewriting one file.
 | `TEXT_PROVIDER` | `gemini` | `gemini` or `openai` (any OpenAI-compatible endpoint). |
 | `OPENAI_BASE_URL` | NVIDIA NIM | Base URL when `TEXT_PROVIDER=openai`. |
 | `OPENAI_API_KEY` | — | Key for that endpoint. |
-| `OPENAI_MODELS` | `meta/llama-3.3-70b-instruct` | Comma-separated fallback list. |
+| `OPENAI_MODELS` | `moonshotai/kimi-k3` | Comma-separated fallback list. |
+| `OPENAI_JSON_MODE` | `schema` | `schema` (json_schema) or `object` (json_object). |
 | `RATE_LIMIT_PER_MIN` | `8` | Requests per minute per IP against the AI routes. |
 | `ENABLE_VIDEO` | `false` | Turns on Veo step videos. **Billable — see below.** |
 | `VEO_MODEL` | `veo-3.1-fast-generate-preview` | Which Veo model to use. |
@@ -111,7 +112,7 @@ instead — no frontend changes:
 TEXT_PROVIDER=openai
 OPENAI_BASE_URL=https://integrate.api.nvidia.com/v1
 OPENAI_API_KEY=nvapi-...
-OPENAI_MODELS=meta/llama-3.3-70b-instruct
+OPENAI_MODELS=moonshotai/kimi-k3,meta/llama-3.3-70b-instruct
 ```
 
 NVIDIA NIM's free tier allows roughly **40 requests/minute** against Gemini's
@@ -123,10 +124,11 @@ Two caveats:
 
 - **Images and video stay on Gemini** and still need `GEMINI_API_KEY`.
   OpenAI-compatible chat endpoints do not generate images.
-- Gemini enforces a response schema natively; OpenAI-compatible endpoints only
-  have `response_format: json_object`, so the schema is described in the prompt
-  and the result is validated on arrival. Structured output may be slightly
-  less reliable depending on the model you pick.
+- Structured output depends on the model. Newer ones (Kimi K3 among them)
+  accept `response_format: json_schema`, which constrains generation the way
+  Gemini's `responseSchema` does; the app converts its schemas automatically.
+  Set `OPENAI_JSON_MODE=object` for models that reject it, which falls back to
+  `json_object` plus a described shape.
 
 `GET /api/capabilities` reports what a given deployment can actually do, and the
 UI hides what it cannot.

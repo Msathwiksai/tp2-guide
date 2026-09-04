@@ -164,7 +164,10 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const TEXT_PROVIDER = (process.env.TEXT_PROVIDER || 'gemini').toLowerCase();
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/$/, '');
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODELS = (process.env.OPENAI_MODELS || 'meta/llama-3.3-70b-instruct')
+// json_schema constrains generation the way Gemini's responseSchema does, but
+// not every model accepts it; json_object is the safe fallback.
+const OPENAI_JSON_MODE = (process.env.OPENAI_JSON_MODE || 'schema').toLowerCase();
+const OPENAI_MODELS = (process.env.OPENAI_MODELS || 'moonshotai/kimi-k3')
   .split(',').map(m => m.trim()).filter(Boolean);
 
 async function generateGemini({ prompt, schema, model }) {
@@ -177,12 +180,38 @@ async function generateGemini({ prompt, schema, model }) {
 }
 
 /**
+ * Gemini schemas use uppercase type names (Type.OBJECT); JSON Schema wants
+ * lowercase. Converting lets one schema definition drive both providers rather
+ * than maintaining two copies that can drift apart.
+ */
+function toJsonSchema(node) {
+  if (!node || typeof node !== 'object') return node;
+  const out = {};
+  if (node.type) out.type = String(node.type).toLowerCase();
+  if (node.enum) out.enum = node.enum;
+  if (node.items) out.items = toJsonSchema(node.items);
+  if (node.properties) {
+    out.properties = Object.fromEntries(
+      Object.entries(node.properties).map(([key, value]) => [key, toJsonSchema(value)]),
+    );
+    // Strict schema modes reject unlisted keys unless this is stated.
+    out.additionalProperties = false;
+  }
+  if (node.required) out.required = node.required;
+  return out;
+}
+
+/**
  * OpenAI-compatible chat completions.
  *
- * These endpoints have no equivalent of Gemini's responseSchema, so JSON is
- * requested via response_format and the shape is described in the prompt. The
- * callers already validate what comes back, and a fenced ```json block is
- * stripped because several providers add one despite being asked not to.
+ * Two levels of JSON enforcement, because support varies by provider:
+ * - `schema` uses response_format json_schema, which constrains generation the
+ *   way Gemini's responseSchema does. Kimi K3 and other newer models take this.
+ * - `object` falls back to response_format json_object and describes the shape
+ *   in the prompt, which is all older models accept.
+ *
+ * A fenced ```json block is stripped either way, because several providers add
+ * one despite being told not to.
  */
 async function generateOpenAICompatible({ prompt, schema, model }) {
   if (!OPENAI_API_KEY) {
@@ -191,12 +220,20 @@ async function generateOpenAICompatible({ prompt, schema, model }) {
     throw missing;
   }
 
+  const strict = schema && OPENAI_JSON_MODE === 'schema';
   const messages = [{
     role: 'user',
-    content: schema
-      ? `${prompt}\n\nRespond with a single JSON object and nothing else — no prose, no code fence. It must match this JSON Schema:\n${JSON.stringify(schema)}`
+    content: schema && !strict
+      // Only needed in the weaker mode; with json_schema the constraint is
+      // enforced by the provider and repeating it just wastes tokens.
+      ? `${prompt}\n\nRespond with a single JSON object and nothing else — no prose, no code fence. It must match this JSON Schema:\n${JSON.stringify(toJsonSchema(schema))}`
       : prompt,
   }];
+
+  const responseFormat = !schema ? undefined
+    : strict
+      ? { type: 'json_schema', json_schema: { name: 'response', strict: true, schema: toJsonSchema(schema) } }
+      : { type: 'json_object' };
 
   const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
     method: 'POST',
@@ -209,7 +246,7 @@ async function generateOpenAICompatible({ prompt, schema, model }) {
       messages,
       temperature: 0.7,
       max_tokens: 4096,
-      ...(schema ? { response_format: { type: 'json_object' } } : {}),
+      ...(responseFormat ? { response_format: responseFormat } : {}),
     }),
   });
 
