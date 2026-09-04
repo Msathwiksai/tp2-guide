@@ -77,8 +77,22 @@ function validGuide(value: unknown): value is AIResponse {
 }
 
 export async function verifyApplicationExistence(target: string): Promise<VerifyResponse> { return request<VerifyResponse>('/api/verify', { target }); }
-export async function getGuideContent(target: string, topic: string, version: string, mode: ExploringMode = ExploringMode.STANDARD): Promise<AIResponse> {
-  const data = await request<unknown>('/api/guide', { target, topic, version, mode });
+export async function getGuideContent(
+  target: string,
+  topic: string,
+  version: string,
+  mode: ExploringMode = ExploringMode.STANDARD,
+  /** Opt-in: when set, generation skips re-explaining flags already known. */
+  tailor?: { known: { base: string; flags: string[] }[] },
+): Promise<AIResponse> {
+  const data = await request<unknown>('/api/guide', {
+    target,
+    topic,
+    version,
+    mode,
+    tailor: !!tailor,
+    known: tailor?.known ?? [],
+  });
   if (!validGuide(data)) throw new Error('The AI returned an incomplete guide. Please try again.');
   return data;
 }

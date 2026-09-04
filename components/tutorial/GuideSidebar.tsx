@@ -13,6 +13,9 @@ interface Props {
   onBackToTopics: () => void;
   onBackHome: () => void;
   onToggleMode: () => void;
+  /** Whether generation is skipping flags the reader already knows. */
+  tailored: boolean;
+  onToggleTailoring: () => void;
 }
 
 /** Sticky rail: breadcrumb, guide identity, progress, and step navigation. */
@@ -28,6 +31,8 @@ const GuideSidebar: React.FC<Props> = ({
   onBackToTopics,
   onBackHome,
   onToggleMode,
+  tailored,
+  onToggleTailoring,
 }) => {
   const expert = exploringMode === ExploringMode.EXPERT;
   const progress = steps.length ? (completedSteps.size / steps.length) * 100 : 0;
@@ -71,6 +76,30 @@ const GuideSidebar: React.FC<Props> = ({
                 {exploringMode}
               </button>
             </div>
+          </div>
+
+          {/* Regenerating is not free, so this is an explicit choice rather
+              than something that silently happens on every guide. */}
+          <div className="mt-8 pt-8 border-t border-amber-50">
+            <button
+              onClick={onToggleTailoring}
+              aria-pressed={tailored}
+              className={`w-full text-left p-5 rounded-2xl border-2 transition-all ${
+                tailored
+                  ? 'bg-amber-500 text-white border-amber-500 shadow-lg'
+                  : 'bg-white text-stone-500 border-stone-100 hover:border-amber-300'
+              }`}
+            >
+              <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                <span aria-hidden="true">{tailored ? '✓' : '✎'}</span>
+                {tailored ? 'Tailored to you' : 'Tailor to what I know'}
+              </span>
+              <span className={`block text-[10px] font-medium mt-2 leading-relaxed ${tailored ? 'text-white/70' : 'text-stone-400'}`}>
+                {tailored
+                  ? 'Skipping flags your journal says you already know.'
+                  : 'Rewrites this guide to skip flags you have already looked up.'}
+              </span>
+            </button>
           </div>
 
           <div className="mt-12">

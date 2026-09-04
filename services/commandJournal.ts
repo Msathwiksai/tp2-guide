@@ -205,6 +205,39 @@ export function familiarityForCommand(os: CommandOS, command: string): CommandFa
   return { seenCount: entry?.count ?? 0, explanation: entry?.explanation, flags };
 }
 
+export interface KnownFlags {
+  base: string;
+  flags: string[];
+}
+
+/**
+ * A compact summary of the flags you already know, for sending to generation.
+ *
+ * Capped hard: this rides in a prompt and in a cache key, and two readers with
+ * the same knowledge should share a cached guide rather than each producing a
+ * unique one. Sorted for exactly that reason — key stability.
+ */
+export function knownFlagSummary(limitBases = 12, limitFlags = 6): KnownFlags[] {
+  const journal = readJournal();
+  const byBase = new Map<string, { flag: string; lastSeen: number }[]>();
+
+  for (const entry of Object.values(journal.flags)) {
+    const list = byBase.get(entry.base) ?? [];
+    list.push({ flag: entry.flag, lastSeen: entry.lastSeen });
+    byBase.set(entry.base, list);
+  }
+
+  return [...byBase.entries()]
+    // Most recently touched command families first, then trimmed.
+    .sort((a, b) => Math.max(...b[1].map(f => f.lastSeen)) - Math.max(...a[1].map(f => f.lastSeen)))
+    .slice(0, limitBases)
+    .map(([base, flags]) => ({
+      base,
+      flags: flags.map(f => f.flag).sort().slice(0, limitFlags),
+    }))
+    .sort((a, b) => a.base.localeCompare(b.base));
+}
+
 export interface JournalStats {
   commands: number;
   lookups: number;

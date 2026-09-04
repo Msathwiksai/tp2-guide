@@ -5,6 +5,7 @@ import { getGuideContent, verifyApplicationExistence, getCapabilities, ApiError 
 import { AIResponse, Tutorial, ExploringMode, Category } from '../types';
 import PageMeta from './PageMeta';
 import { osForTutorial } from './commandDetection';
+import { knownFlagSummary } from '../services/commandJournal';
 import TopicPicker from './tutorial/TopicPicker';
 import GuideSidebar from './tutorial/GuideSidebar';
 import StepPanel from './tutorial/StepPanel';
@@ -84,6 +85,8 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
       : tutorial.versions[0] || '';
   const exploringMode =
     searchParams.get('mode') === ExploringMode.EXPERT ? ExploringMode.EXPERT : ExploringMode.STANDARD;
+  // Opt-in, and in the URL so a tailored guide is still linkable.
+  const tailored = searchParams.get('tailored') === '1';
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -180,7 +183,13 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
         setError(null);
         setQuotaError(false);
         setBusyError(false);
-        const content = await getGuideContent(tutorial.name, selectedTopic, selectedVersion, exploringMode);
+        const content = await getGuideContent(
+          tutorial.name,
+          selectedTopic,
+          selectedVersion,
+          exploringMode,
+          tailored ? { known: knownFlagSummary() } : undefined,
+        );
         // Guards against an earlier, slower request overwriting a newer one.
         if (cancelled || requestId !== guideRequestIdRef.current) return;
         setGuide(content);
@@ -197,10 +206,19 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
     })();
 
     return () => { cancelled = true; };
-  }, [selectedTopic, selectedVersion, exploringMode, tutorial.name, verificationError, isVerifying, retryNonce]);
+  }, [selectedTopic, selectedVersion, exploringMode, tailored, tutorial.name, verificationError, isVerifying, retryNonce]);
 
   const handleVersionChange = (e: React.ChangeEvent<HTMLSelectElement>) =>
     updateGuideParams({ version: e.target.value });
+
+  const toggleTailoring = () => {
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev);
+      if (tailored) params.delete('tailored');
+      else params.set('tailored', '1');
+      return params;
+    });
+  };
 
   const toggleExploringMode = () =>
     updateGuideParams({
@@ -297,6 +315,8 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
         onBackToTopics={backToTopics}
         onBackHome={() => navigate('/')}
         onToggleMode={toggleExploringMode}
+        tailored={tailored}
+        onToggleTailoring={toggleTailoring}
       />
 
       <div className="flex-1 space-y-16">
