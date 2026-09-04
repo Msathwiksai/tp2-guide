@@ -38,7 +38,7 @@ const RouteFallback: React.FC = () => (
   </div>
 );
 
-const KeyedTutorialView: React.FC<{ onAskDoubt: (question: string) => void }> = ({ onAskDoubt }) => {
+const KeyedTutorialView: React.FC<{ onAskDoubt: (question: string, topic?: string) => void }> = ({ onAskDoubt }) => {
   const { id } = useParams<{ id: string }>();
   return <TutorialView key={id} onAskDoubt={onAskDoubt} />;
 };
@@ -47,7 +47,7 @@ const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [selectedTutorial, setSelectedTutorial] = useState<Tutorial | null>(null);
-  const [externalMessage, setExternalMessage] = useState<string | null>(null);
+  const [externalMessage, setExternalMessage] = useState<{ text: string; topic?: string } | null>(null);
   const [isDemoOpen, setIsDemoOpen] = useState(false);
 
   const handleSelectTutorial = (tutorial: Tutorial) => {
@@ -55,8 +55,8 @@ const App: React.FC = () => {
     navigate(`/tutorial/${tutorial.id}`);
   };
 
-  const askAIDoubt = (question: string) => {
-    setExternalMessage(question);
+  const askAIDoubt = (question: string, topic?: string) => {
+    setExternalMessage({ text: question, topic });
   };
 
   const scrollToLibrary = () => {

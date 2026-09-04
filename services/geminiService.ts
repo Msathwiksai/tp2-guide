@@ -36,7 +36,27 @@ export class ApiError extends Error {
  */
 const TIMEOUT_MS = 120_000;
 
-async function request<T>(path: string, body: object): Promise<T> {
+/**
+ * Identical requests that are already in flight share one promise.
+ *
+ * React StrictMode double-invokes effects in development, so every guide load
+ * fired two generations — the second result was discarded by the caller's
+ * request-id guard, but both had already been sent and billed. Genuine
+ * duplicates (a double click, a fast re-render) collapse the same way.
+ */
+const inFlight = new Map<string, Promise<unknown>>();
+
+function request<T>(path: string, body: object): Promise<T> {
+  const key = `${path}::${JSON.stringify(body)}`;
+  const existing = inFlight.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const pending = sendRequest<T>(path, body).finally(() => inFlight.delete(key));
+  inFlight.set(key, pending);
+  return pending;
+}
+
+async function sendRequest<T>(path: string, body: object): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   let response: Response;
@@ -143,7 +163,13 @@ export async function askAIQuestion(
   context: string,
   question: string,
   history: ChatTurn[] = [],
+  /**
+   * Which part of the app the reader is on. Passed separately, never glued into
+   * the question — prepending "Doubt about Installation Guide:" made the model
+   * answer the topic instead of what was actually asked.
+   */
+  topic?: string,
 ): Promise<string> {
-  const data = await request<{ text: string }>('/api/chat', { context, question, history });
+  const data = await request<{ text: string }>('/api/chat', { context, question, history, topic });
   return data.text || "I'm sorry, I couldn't generate an answer right now.";
 }

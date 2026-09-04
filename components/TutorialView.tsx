@@ -24,7 +24,7 @@ import {
 } from './tutorial/StatusScreens';
 
 interface TutorialViewProps {
-  onAskDoubt: (question: string) => void;
+  onAskDoubt: (question: string, topic?: string) => void;
 }
 
 /**
@@ -240,7 +240,8 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
   const handleDoubtSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customDoubt.trim()) return;
-    onAskDoubt(`Doubt about ${selectedTopic} in ${tutorial?.name}: ${customDoubt}`);
+    // The topic travels as context, not inside the question text.
+    onAskDoubt(customDoubt, selectedTopic ?? undefined);
     setCustomDoubt('');
   };
 

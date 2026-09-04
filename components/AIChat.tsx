@@ -1,9 +1,19 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { askAIQuestion, type ChatTurn } from '../services/geminiService';
+import { askAIQuestion, ApiError, type ChatTurn } from '../services/geminiService';
 import { CommandChip } from './CommandText';
 import { isLikelyCommand, osForTutorial } from './commandDetection';
 import { CommandOS } from '../types';
+
+const errorText = (err: unknown): string => {
+  if (err instanceof ApiError) {
+    if (err.isRateLimited) return "You are going a bit fast — this site limits requests. Wait a moment and ask again.";
+    if (err.isUpstreamBusy) return "The AI models are busy right now, which is common on the free tier. Try again in a moment.";
+    if (err.isUnavailable) return "This server has no API key configured, so I cannot answer yet.";
+    if (err.status === 504) return "That took too long and timed out. Try asking again.";
+  }
+  return "Something went wrong sending that. Try again.";
+};
 
 const toHistory = (messages: Message[]): ChatTurn[] =>
   messages.map(m => ({ role: m.isUser ? 'user' as const : 'assistant' as const, text: m.text }));
@@ -84,7 +94,7 @@ const renderInline = (text: string, os: CommandOS) => {
 
 interface AIChatProps {
   activeContext: string;
-  externalMessage?: string | null;
+  externalMessage?: { text: string; topic?: string } | null;
   onMessageHandled?: () => void;
 }
 
@@ -105,14 +115,14 @@ const AIChat: React.FC<AIChatProps> = ({ activeContext, externalMessage, onMessa
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isTyping, state]);
 
-  const handleExternalSend = useCallback(async (text: string) => {
+  const handleExternalSend = useCallback(async (text: string, topic?: string) => {
     setMessages(prev => [...prev, { text, isUser: true }]);
     setIsTyping(true);
     try {
-      const response = await askAIQuestion(activeContext, text, toHistory(messagesRef.current));
+      const response = await askAIQuestion(activeContext, text, toHistory(messagesRef.current), topic);
       setMessages(prev => [...prev, { text: response, isUser: false }]);
-    } catch {
-      setMessages(prev => [...prev, { text: "Protocol error. Intelligence link unstable.", isUser: false }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { text: errorText(err), isUser: false }]);
     } finally { setIsTyping(false); }
   }, [activeContext]);
 
@@ -124,18 +134,18 @@ const AIChat: React.FC<AIChatProps> = ({ activeContext, externalMessage, onMessa
    * Only `externalMessage` belongs in the dependency list — re-running when the
    * context or callback changes would resend the same question.
    */
-  /* eslint-disable react-hooks/set-state-in-effect */
+   
   useEffect(() => {
     if (!externalMessage) return;
     setState('CHAT');
     setMessages(prev => prev.length === 0
       ? [{ text: `Protocol activated for **${activeContext}**. \n\nI can assist with installation, updates, or deep architectural questions. \n\nHow may I facilitate your expertise?`, isUser: false }]
       : prev);
-    handleExternalSend(externalMessage);
+    handleExternalSend(externalMessage.text, externalMessage.topic);
     onMessageHandled?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalMessage]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+   
 
   const startChat = (initialMessage?: string) => {
     setMessages([{ text: `Protocol activated for **${activeContext}**. \n\nI am standing by to facilitate your mastery. What shall we analyze?`, isUser: false }]);
@@ -155,8 +165,8 @@ const AIChat: React.FC<AIChatProps> = ({ activeContext, externalMessage, onMessa
     try {
       const response = await askAIQuestion(activeContext, textToSend, toHistory(messagesRef.current));
       setMessages(prev => [...prev, { text: response, isUser: false }]);
-    } catch {
-      setMessages(prev => [...prev, { text: "Intelligence link interrupted.", isUser: false }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { text: errorText(err), isUser: false }]);
     } finally { setIsTyping(false); }
   };
 

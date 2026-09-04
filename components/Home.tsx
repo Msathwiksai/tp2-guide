@@ -157,13 +157,16 @@ const Home: React.FC<HomeProps> = ({ tutorials, onSelect, onWatchDemo, onStartCo
 
           return (
             <div key={cat} className="space-y-12">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-6 border-b-2 border-amber-50 pb-8">
-                <div className="flex items-center gap-6">
-                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-sm border border-amber-100">
+              {/* flex-wrap plus min-w-0: at ~645px the title and the 221px
+                  button did not fit side by side and pushed the page into
+                  horizontal scroll. They now wrap instead of overflowing. */}
+              <div className="flex flex-col sm:flex-row sm:flex-wrap items-center justify-between gap-6 border-b-2 border-amber-50 pb-8">
+                <div className="flex items-center gap-6 min-w-0">
+                  <div className="w-16 h-16 flex-shrink-0 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-sm border border-amber-100">
                     {getCategoryIcon(cat)}
                   </div>
-                  <div>
-                    <h2 className="text-4xl font-black text-stone-900 tracking-tighter uppercase">{cat}</h2>
+                  <div className="min-w-0">
+                    <h2 className="text-3xl sm:text-4xl font-black text-stone-900 tracking-tighter uppercase break-words">{cat}</h2>
                     <p className="text-stone-400 text-xs font-black uppercase tracking-[0.2em]">{categoryTutorials.length} Curated Guides</p>
                   </div>
                 </div>
