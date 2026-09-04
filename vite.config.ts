@@ -11,7 +11,9 @@ export default defineConfig({
         // itself. That self-proxy loop never resolves, so the UI spins forever.
         // Failing loudly is far easier to diagnose than a hanging request.
         strictPort: true,
-        host: 'localhost',
+        // 0.0.0.0 keeps the dev server reachable from other devices on your
+        // network (phone, tablet) via the Network URL Vite prints on startup.
+        host: '0.0.0.0',
         proxy: {
           // Derived from the same env var the API server reads, so the two
           // cannot drift apart.
