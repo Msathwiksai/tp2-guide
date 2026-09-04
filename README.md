@@ -88,13 +88,48 @@ means rewriting one file.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `GEMINI_API_KEY` | — | **Required.** Read only by the server. |
+| `GEMINI_API_KEY` | — | Required for images/video, and for text unless `TEXT_PROVIDER=openai`. |
 | `API_PORT` | `3001` | Port for the API server. |
 | `API_ORIGIN` | `http://localhost:3001` | Origin Vite proxies `/api` to in development. |
-| `GEMINI_MODELS` | `gemini-3.6-flash,…` | Comma-separated model fallback list. |
+| `GEMINI_MODELS` | `gemini-3.6-flash,…` | Comma-separated Gemini fallback list. |
+| `TEXT_PROVIDER` | `gemini` | `gemini` or `openai` (any OpenAI-compatible endpoint). |
+| `OPENAI_BASE_URL` | NVIDIA NIM | Base URL when `TEXT_PROVIDER=openai`. |
+| `OPENAI_API_KEY` | — | Key for that endpoint. |
+| `OPENAI_MODELS` | `meta/llama-3.3-70b-instruct` | Comma-separated fallback list. |
 | `RATE_LIMIT_PER_MIN` | `8` | Requests per minute per IP against the AI routes. |
 | `ENABLE_VIDEO` | `false` | Turns on Veo step videos. **Billable — see below.** |
 | `VEO_MODEL` | `veo-3.1-fast-generate-preview` | Which Veo model to use. |
+
+### Switching the text provider
+
+Gemini's free tier deprioritises traffic heavily, so `503 high demand` refusals
+are common enough to make the app feel broken. Every AI call goes through one
+function in `server.mjs`, so any **OpenAI-compatible** endpoint can serve text
+instead — no frontend changes:
+
+```
+TEXT_PROVIDER=openai
+OPENAI_BASE_URL=https://integrate.api.nvidia.com/v1
+OPENAI_API_KEY=nvapi-...
+OPENAI_MODELS=meta/llama-3.3-70b-instruct
+```
+
+NVIDIA NIM's free tier allows roughly **40 requests/minute** against Gemini's
+~10. Groq, OpenRouter, Together and a local Ollama work identically — only the
+base URL, key and model names change. `OPENAI_MODELS` is comma-separated and
+gets the same fall-through-on-busy behaviour as `GEMINI_MODELS`.
+
+Two caveats:
+
+- **Images and video stay on Gemini** and still need `GEMINI_API_KEY`.
+  OpenAI-compatible chat endpoints do not generate images.
+- Gemini enforces a response schema natively; OpenAI-compatible endpoints only
+  have `response_format: json_object`, so the schema is described in the prompt
+  and the result is validated on arrival. Structured output may be slightly
+  less reliable depending on the model you pick.
+
+`GET /api/capabilities` reports what a given deployment can actually do, and the
+UI hides what it cannot.
 
 ### Video generation
 

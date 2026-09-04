@@ -7,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 const apiKey = process.env.GEMINI_API_KEY;
 // Don't hard-crash the process: without a key the AI routes return 503 but the
 // static frontend still builds and serves.
-if (!apiKey) console.error('[warn] GEMINI_API_KEY is not set - /api/* routes will return 503.');
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 const app = express();
 // Set deliberately: req.ip is only trustworthy if we know how many proxies sit
@@ -75,11 +74,16 @@ function storeImage(buffer) {
   return `/api/image/${id}`;
 }
 
+// Text can run without a Gemini key when another provider is configured;
+// images cannot, since only Gemini generates them here.
+const textReady = () => (TEXT_PROVIDER === 'openai' ? !!OPENAI_API_KEY : !!ai);
+const imagesReady = () => !!ai;
+
 app.use(express.json({ limit: '12kb' }));
 app.use('/api', (req, res, next) => {
   // Reading a cached image is cheap and must not burn the AI rate-limit budget.
   if (req.method === 'GET') return next();
-  if (!ai) return res.status(503).json({ error: 'The AI service is not configured on this server.', code: 'NOT_CONFIGURED' });
+  if (!textReady()) return res.status(503).json({ error: 'The AI service is not configured on this server.', code: 'NOT_CONFIGURED' });
   const now = Date.now();
   const recent = (requests.get(req.ip) ?? []).filter(time => now - time < WINDOW_MS);
   if (recent.length >= MAX_PER_WINDOW) return res.status(429).json({ error: 'Too many requests. Please try again shortly.' });
@@ -145,18 +149,96 @@ const isRetryable = (error) => {
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * Text generation provider.
+ *
+ * Gemini's free tier deprioritises traffic heavily, so "high demand" refusals
+ * are common enough to make the app feel broken. Any OpenAI-compatible endpoint
+ * can be used instead — NVIDIA NIM (40 req/min free vs Gemini's ~10), Groq,
+ * OpenRouter, Together, or a local model — without touching the frontend,
+ * because every AI call already goes through this one function.
+ *
+ * Image generation stays on Gemini regardless: OpenAI-compatible chat endpoints
+ * do not produce images.
+ */
+const TEXT_PROVIDER = (process.env.TEXT_PROVIDER || 'gemini').toLowerCase();
+const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/$/, '');
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODELS = (process.env.OPENAI_MODELS || 'meta/llama-3.3-70b-instruct')
+  .split(',').map(m => m.trim()).filter(Boolean);
+
+async function generateGemini({ prompt, schema, model }) {
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+    config: schema ? { responseMimeType: 'application/json', responseSchema: schema } : undefined,
+  });
+  return response.text || '';
+}
+
+/**
+ * OpenAI-compatible chat completions.
+ *
+ * These endpoints have no equivalent of Gemini's responseSchema, so JSON is
+ * requested via response_format and the shape is described in the prompt. The
+ * callers already validate what comes back, and a fenced ```json block is
+ * stripped because several providers add one despite being asked not to.
+ */
+async function generateOpenAICompatible({ prompt, schema, model }) {
+  if (!OPENAI_API_KEY) {
+    const missing = new Error('OPENAI_API_KEY is not set, but TEXT_PROVIDER is openai.');
+    missing.status = 503;
+    throw missing;
+  }
+
+  const messages = [{
+    role: 'user',
+    content: schema
+      ? `${prompt}\n\nRespond with a single JSON object and nothing else — no prose, no code fence. It must match this JSON Schema:\n${JSON.stringify(schema)}`
+      : prompt,
+  }];
+
+  const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.7,
+      max_tokens: 4096,
+      ...(schema ? { response_format: { type: 'json_object' } } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    const error = new Error(`Upstream ${response.status}: ${detail.slice(0, 200)}`);
+    error.status = response.status;
+    throw error;
+  }
+
+  const data = await response.json();
+  const text = data?.choices?.[0]?.message?.content ?? '';
+  // Strip a ```json fence if the model added one anyway.
+  return text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+}
+
+const activeModels = () => (TEXT_PROVIDER === 'openai' ? OPENAI_MODELS : TEXT_MODELS);
+
 async function generate({ prompt, schema }) {
+  const models = activeModels();
   let lastError;
-  for (let attempt = 0; attempt < TEXT_MODELS.length; attempt++) {
-    const model = TEXT_MODELS[attempt];
+  for (let attempt = 0; attempt < models.length; attempt++) {
+    const model = models[attempt];
     try {
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: schema ? { responseMimeType: 'application/json', responseSchema: schema } : undefined,
-      });
+      const text = TEXT_PROVIDER === 'openai'
+        ? await generateOpenAICompatible({ prompt, schema, model })
+        : await generateGemini({ prompt, schema, model });
       if (attempt > 0) console.log(`[info] Recovered on fallback model ${model}.`);
-      return response.text || '';
+      return text;
     } catch (error) {
       lastError = error;
       if (!isRetryable(error)) throw error;
@@ -271,11 +353,12 @@ function putVideoJob(id, job) {
 // Lets the UI hide what this deployment cannot actually do, instead of
 // offering a button that always fails.
 app.get('/api/capabilities', (_req, res) => {
-  res.json({ ai: !!ai, images: !!ai, video: VIDEO_ENABLED && !!ai });
+  res.json({ ai: textReady(), images: imagesReady(), video: VIDEO_ENABLED && imagesReady() });
 });
 
 app.post('/api/video', async (req, res, next) => {
   try {
+    if (!imagesReady()) return res.status(503).json({ error: 'Video generation needs a Gemini API key on this server.', code: 'NOT_CONFIGURED' });
     if (!VIDEO_ENABLED) {
       return res.status(501).json({
         error: 'Video generation is disabled on this server. Set ENABLE_VIDEO=true and use a billing-enabled key.',
@@ -405,7 +488,7 @@ Answer exactly what the question asks, and nothing else. If the question is shor
     res.json({ text });
   } catch (error) { next(error); }
 });
-app.post('/api/image', async (req, res, next) => { try { const appName = requireText(req.body.app, 'Application', 120), version = requireText(req.body.version, 'Version', 80), title = requireText(req.body.stepTitle, 'Step title', 200), cue = clean(req.body.visualCue, 500); const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: [{ parts: [{ text: `Create a clear instructional illustration for <app>${appName}</app>, version <version>${version}</version>. Scene: <title>${title}</title>. Screen cue: <cue>${cue}</cue>. Do not include sensitive data.` }] }], config: { imageConfig: { aspectRatio: '16:9' } } }); const image = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData)?.inlineData?.data; if (!image) return res.json({ image: null }); res.json({ image: storeImage(Buffer.from(image, 'base64')) }); } catch (error) { next(error); } });
+app.post('/api/image', async (req, res, next) => { try { if (!imagesReady()) return res.status(503).json({ error: 'Image generation needs a Gemini API key on this server.', code: 'NOT_CONFIGURED' }); const appName = requireText(req.body.app, 'Application', 120), version = requireText(req.body.version, 'Version', 80), title = requireText(req.body.stepTitle, 'Step title', 200), cue = clean(req.body.visualCue, 500); const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: [{ parts: [{ text: `Create a clear instructional illustration for <app>${appName}</app>, version <version>${version}</version>. Scene: <title>${title}</title>. Screen cue: <cue>${cue}</cue>. Do not include sensitive data.` }] }], config: { imageConfig: { aspectRatio: '16:9' } } }); const image = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData)?.inlineData?.data; if (!image) return res.json({ image: null }); res.json({ image: storeImage(Buffer.from(image, 'base64')) }); } catch (error) { next(error); } });
 
 // Generated images are served by URL rather than inlined as base64 data URLs.
 // Data URLs are ~33% larger than the bytes and used to be held in React state
@@ -545,7 +628,16 @@ app.use((error, _req, res, _next) => {
 // API_PORT always wins, so it stays overridable when you actually mean it.
 const isProduction = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.API_PORT || (isProduction ? process.env.PORT : undefined) || 3001);
-const server = app.listen(PORT, () => console.log(`API server listening on port ${PORT}`));
+const server = app.listen(PORT, () => {
+  console.log(`API server listening on port ${PORT}`);
+  console.log(`[info] Text provider: ${TEXT_PROVIDER}${TEXT_PROVIDER === 'openai' ? ` (${OPENAI_BASE_URL}, ${OPENAI_MODELS[0]})` : ` (${TEXT_MODELS[0]})`}`);
+  if (!textReady()) {
+    console.error(TEXT_PROVIDER === 'openai'
+      ? '[warn] OPENAI_API_KEY is not set - text routes will return 503.'
+      : '[warn] GEMINI_API_KEY is not set - text routes will return 503.');
+  }
+  if (!imagesReady()) console.error('[warn] No GEMINI_API_KEY - image and video generation are unavailable.');
+});
 // Without this the process stays alive but silently bound to nothing, so the
 // Vite proxy just returns ECONNREFUSED with no clue why.
 server.on('error', (err) => {
