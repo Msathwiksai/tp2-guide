@@ -50,7 +50,7 @@ const Breakdown: React.FC<{
             {risk.icon} {risk.label}
           </span>
         </div>
-        <div className="border-t border-stone-200 bg-stone-50 px-8 py-5 dark:border-stone-700 dark:bg-stone-900/60">
+        <div className="border-t border-stone-200 bg-stone-50 px-8 py-5">
           <ShareCommand command={result.normalized} os={os} />
         </div>
         <div className="p-10 space-y-4">

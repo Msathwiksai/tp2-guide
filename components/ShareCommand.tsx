@@ -39,7 +39,7 @@ export function ShareCommand({ command, os }: { command: string; os: CommandOS }
       <button
         type="button"
         onClick={copy}
-        className="inline-flex items-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-stone-700 transition hover:border-amber-400 hover:text-amber-700 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-300 dark:hover:text-amber-400"
+        className="inline-flex items-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-stone-700 transition hover:border-amber-400 hover:text-amber-700"
       >
         {state === 'copied' ? '✓ Link copied' : state === 'failed' ? 'Press Ctrl+C' : '🔗 Copy link to this'}
       </button>
@@ -51,7 +51,7 @@ export function ShareCommand({ command, os }: { command: string; os: CommandOS }
           value={url}
           onFocus={event => event.currentTarget.select()}
           aria-label="Link to this explanation"
-          className="min-w-0 flex-1 rounded-xl border border-stone-300 bg-stone-50 px-3 py-2 font-mono text-xs text-stone-700 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-300"
+          className="min-w-0 flex-1 rounded-xl border border-stone-300 bg-stone-50 px-3 py-2 font-mono text-xs text-stone-700"
         />
       )}
     </div>
