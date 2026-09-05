@@ -100,6 +100,9 @@ means rewriting one file.
 | `OPENAI_MAX_TOKENS` | `12000` | Output ceiling. Too low truncates a guide into unparseable JSON. |
 | `UPSTREAM_TIMEOUT_MS` | `45000` | How long to wait on one model before falling through to the next. |
 | `OPENAI_EXTRA_BODY` | — | JSON merged into the request body, for provider-specific settings. |
+| `TAVILY_API_KEY` | — | Enables web research before writing a guide. Free tier, optional. |
+| `RESEARCH_MAX_RESULTS` | `5` | Pages fed into the prompt per guide. |
+| `RESEARCH_TIMEOUT_MS` | `12000` | Wait before giving up and writing from recall. |
 | `RATE_LIMIT_PER_MIN` | `8` | Requests per minute per IP against the AI routes. |
 | `ENABLE_VIDEO` | `false` | Turns on Veo step videos. **Billable — see below.** |
 | `VEO_MODEL` | `veo-3.1-fast-generate-preview` | Which Veo model to use. |

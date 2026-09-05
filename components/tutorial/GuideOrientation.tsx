@@ -79,6 +79,45 @@ export function GuideOrientation({ guide }: { guide: AIResponse }) {
   );
 }
 
+/**
+ * The pages this guide was grounded in.
+ *
+ * Shown because a generated guide asks the reader to trust it, and a list of
+ * real pages they can check is the only honest basis for that. These URLs come
+ * from the search itself, not from the model, so they are safe to link.
+ */
+export function GuideSources({ guide }: { guide: AIResponse }) {
+  const sources = guide.sources?.filter(s => s?.url && s?.title) ?? [];
+  if (sources.length === 0) return null;
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white/70 p-8 dark:border-slate-700 dark:bg-slate-900/40">
+      <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+        Checked against these pages
+      </h2>
+      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+        Read while writing this guide. Verify anything destructive here first.
+      </p>
+      <ul className="mt-4 space-y-2">
+        {sources.map((source, i) => (
+          <li key={i}>
+            <a
+              href={source.url}
+              target="_blank"
+              // noreferrer as well as noopener: these are third-party pages the
+              // reader did not choose, so they should not receive a referrer.
+              rel="noopener noreferrer"
+              className="text-sm text-amber-700 underline decoration-amber-300 underline-offset-4 hover:decoration-amber-600 dark:text-amber-400"
+            >
+              {source.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** Checklist and FAQs, shown after the steps rather than before them. */
 export function GuideWrapUp({ guide }: { guide: AIResponse }) {
   const checklist = guide.beginnerChecklist?.filter(Boolean) ?? [];

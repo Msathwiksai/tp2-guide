@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { GuideOrientation, GuideWrapUp } from './tutorial/GuideOrientation';
+import { GuideOrientation, GuideSources, GuideWrapUp } from './tutorial/GuideOrientation';
 import { TUTORIALS } from '../constants';
 import { saveApp, useSavedApps, toTutorial } from '../services/library';
 import { getGuideContent, verifyApplicationExistence, getCapabilities, ApiError } from '../services/geminiService';
@@ -371,7 +371,12 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
 
         {/* Checklist and FAQs land on the last step, where someone is either
             finished or stuck — which is when a FAQ is worth reading. */}
-        {activeStep === guide.steps.length - 1 && <GuideWrapUp guide={guide} />}
+        {activeStep === guide.steps.length - 1 && (
+          <>
+            <GuideWrapUp guide={guide} />
+            <GuideSources guide={guide} />
+          </>
+        )}
 
         <DoubtHub
           exploringMode={exploringMode}
