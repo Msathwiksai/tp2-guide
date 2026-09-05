@@ -12,7 +12,7 @@ export const TUTORIALS: Tutorial[] = [
     color: 'bg-blue-500',
     popularTopics: ['Installation Guide', 'Updating Windows', 'Taskbar & Start Menu', 'File Explorer Basics', 'System Settings'],
     advancedTopics: ['PowerShell Automation', 'Registry Editor Tweaks', 'Group Policy Management', 'Windows Subsystem for Linux (WSL2)', 'VHDX Virtualization'],
-    versions: ['11', '10', '7']
+    versions: ['11', '10']
   },
   {
     id: 'macos',
@@ -23,7 +23,7 @@ export const TUTORIALS: Tutorial[] = [
     color: 'bg-slate-800',
     popularTopics: ['Installation & Setup', 'Software Updates', 'Stage Manager', 'System Settings', 'Trackpad Gestures'],
     advancedTopics: ['Terminal & Zsh Mastery', 'Brew Package Manager', 'Launchd Agents', 'Automator & AppleScript', 'Disk Utility Expert Mode'],
-    versions: ['Sequoia (15)', 'Sonoma (14)', 'Ventura (13)']
+    versions: ['26', '15 (Sequoia)', '14 (Sonoma)']
   },
   {
     id: 'android',
@@ -34,7 +34,7 @@ export const TUTORIALS: Tutorial[] = [
     color: 'bg-green-500',
     popularTopics: ['System Updates', 'Customizing Home Screen', 'Managing Permissions', 'Battery Optimization', 'Google Play Security'],
     advancedTopics: ['Developer Options & ADB', 'Sideloading Apps', 'Custom Launchers', 'Rooting Concepts', 'Work Profile Setup'],
-    versions: ['15', '14', '13']
+    versions: ['17', '16', '15']
   },
   {
     id: 'ios',
@@ -45,7 +45,7 @@ export const TUTORIALS: Tutorial[] = [
     color: 'bg-stone-900',
     popularTopics: ['iOS Updates', 'Control Center Setup', 'iCloud Backup', 'FaceID & Security', 'Widget Configuration'],
     advancedTopics: ['Shortcuts Automation', 'Focus Mode Filters', 'Advanced Privacy Reports', 'App Store Subscription Management', 'Beta Profile Installation'],
-    versions: ['18', '17', '16']
+    versions: ['26', '18', '17']
   },
   {
     id: 'ubuntu',
@@ -56,7 +56,7 @@ export const TUTORIALS: Tutorial[] = [
     color: 'bg-orange-600',
     popularTopics: ['LTS Installation', 'The GNOME Desktop', 'Software Center Basics', 'Updating via Terminal', 'User Management'],
     advancedTopics: ['Bash Scripting', 'Nginx Web Server Setup', 'SSH Security Config', 'UFW Firewall Management', 'Docker Installation'],
-    versions: ['24.04 LTS', '22.04 LTS']
+    versions: ['26.04 LTS', '24.04 LTS']
   },
 
   // --- Development & DevOps ---
@@ -69,7 +69,7 @@ export const TUTORIALS: Tutorial[] = [
     color: 'bg-red-500',
     popularTopics: ['SDK Installation', 'Project Structure', 'Smart Code Completion', 'Debugging Basics', 'Version Control Integration'],
     advancedTopics: ['Custom Plugin Development', 'Advanced Refactoring Tools', 'Profiler & Memory Analysis', 'Build Tool Optimization (Maven/Gradle)', 'Database Tool Window'],
-    versions: ['2024.x', '2023.x']
+    versions: ['2026.2', '2026.1', '2025.3']
   },
   {
     id: 'vscode',
@@ -127,7 +127,7 @@ export const TUTORIALS: Tutorial[] = [
     color: 'bg-blue-900',
     popularTopics: ['Adobe Creative Cloud Install', 'Understanding Layers', 'Selection Tools', 'Generative Fill', 'Camera Raw Basics'],
     advancedTopics: ['Non-Destructive Action Scripts', 'Frequency Separation', '3D Post-Production', 'Advanced Masking with Channels', 'Custom Brush Engineering'],
-    versions: ['2024', '2025']
+    versions: ['2026', '2025']
   },
 
   // --- Office & Productivity ---
@@ -140,7 +140,7 @@ export const TUTORIALS: Tutorial[] = [
     color: 'bg-green-700',
     popularTopics: ['Office 365 Installation', 'Pivot Tables', 'XLOOKUP & Formulas', 'Conditional Formatting', 'Data Cleaning'],
     advancedTopics: ['VBA Macro Development', 'Lambda Functions', 'Power Pivot Data Modeling', 'Array Formulas (M-Code)', 'Solver & Data Analysis Toolpak'],
-    versions: ['Office 365', '2021']
+    versions: ['Microsoft 365', '2021']
   },
   {
     id: 'notion',
@@ -201,7 +201,7 @@ export const TUTORIALS: Tutorial[] = [
     color: 'bg-orange-500',
     popularTopics: ['Account Registration', 'Inventory Management', 'Shipment Tracking', 'Billing Dashboards', 'FBA Basics'],
     advancedTopics: ['PPC Advertising Architecting', 'A+ Content Strategy', 'Brand Registry Workflow', 'Global Expansion Config', 'API Data Retrieval'],
-    versions: ['Global']
+    versions: ['Current']
   }
 ];
 
