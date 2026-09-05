@@ -666,7 +666,11 @@ app.post('/api/guide', async (req, res, next) => {
     const known = req.body.tailor ? normaliseKnown(req.body.known) : [];
     const signature = knownSignature(known);
 
-    const cacheKey = `v4::${providerTag()}::${target}::${topic}::${version}::${mode}::${signature}`.toLowerCase();
+    // The research flag is part of the key for the same reason the provider is:
+    // a guide written from recall and one grounded in fetched pages are
+    // different artefacts. Without it, turning research on kept serving the
+    // ungrounded guides already cached, so the feature looked broken.
+    const cacheKey = `v4::${providerTag()}::${RESEARCH_ENABLED ? 'web' : 'recall'}::${target}::${topic}::${version}::${mode}::${signature}`.toLowerCase();
     const cached = cacheGet(cacheKey);
     if (cached) { res.set('X-Cache', 'HIT'); return res.json(cached); }
     res.set('X-Cache', 'MISS');
