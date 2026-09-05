@@ -58,6 +58,17 @@ export interface CommandExplanation {
 export interface AIResponse {
   steps: GuideStep[];
   overview: string;
+  /** Plain-English statement of what this is and the problem it solves. */
+  whatItIs?: string;
+  /** Concrete situations a reader would actually reach for it. */
+  whenToUse?: string[];
+  /**
+   * How access is actually obtained. Not always an installation — a hosted
+   * service is signed up for, an MCP server is configured in a client, and
+   * something shipped with the OS needs nothing at all.
+   */
+  howYouGetIt?: string;
+  /** Empty for anything without a keyboard interface — a CLI, API or protocol. */
   commonShortcuts: { key: string; action: string }[];
   beginnerChecklist: string[];
   faqs: FAQItem[];

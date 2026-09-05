@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { GuideOrientation, GuideWrapUp } from './tutorial/GuideOrientation';
 import { TUTORIALS } from '../constants';
 import { getGuideContent, verifyApplicationExistence, getCapabilities, ApiError } from '../services/geminiService';
 import { AIResponse, Tutorial, ExploringMode, Category } from '../types';
@@ -325,6 +326,9 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
       />
 
       <div className="flex-1 space-y-16">
+        {/* Shown only on the first step: it is orientation for the guide, not
+            for one step, and repeating it above every step would bury them. */}
+        {activeStep === 0 && <GuideOrientation guide={guide} />}
         <StepPanel
           step={currentStep}
           stepKey={`${selectedTopic}-${activeStep}`}
@@ -345,6 +349,10 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
           onPrev={() => setActiveStep(prev => prev - 1)}
           onNext={() => setActiveStep(prev => prev + 1)}
         />
+
+        {/* Checklist and FAQs land on the last step, where someone is either
+            finished or stuck — which is when a FAQ is worth reading. */}
+        {activeStep === guide.steps.length - 1 && <GuideWrapUp guide={guide} />}
 
         <DoubtHub
           exploringMode={exploringMode}
