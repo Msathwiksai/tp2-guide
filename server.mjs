@@ -672,7 +672,10 @@ app.post('/api/guide', async (req, res, next) => {
     // ungrounded guides already cached, so the feature looked broken.
     const cacheKey = `v4::${providerTag()}::${RESEARCH_ENABLED ? 'web' : 'recall'}::${target}::${topic}::${version}::${mode}::${signature}`.toLowerCase();
     const cached = cacheGet(cacheKey);
-    if (cached) { res.set('X-Cache', 'HIT'); return res.json(cached); }
+    // fromCache tells the reader no AI call was made. Without it a cached guide
+    // and a freshly generated one looked identical, so the only way to know
+    // whether a click had spent anything was to watch the clock.
+    if (cached) { res.set('X-Cache', 'HIT'); return res.json({ ...cached, fromCache: true }); }
     res.set('X-Cache', 'MISS');
 
     const knownBlock = known.length
@@ -839,7 +842,7 @@ app.post('/api/command', async (req, res, next) => {
     const os = ['Windows', 'macOS', 'Linux'].includes(req.body.os) ? req.body.os : 'Linux';
     const cacheKey = `cmd::${providerTag()}::${os}::${command}`.toLowerCase();
     const cached = cacheGet(cacheKey);
-    if (cached) { res.set('X-Cache', 'HIT'); return res.json(cached); }
+    if (cached) { res.set('X-Cache', 'HIT'); return res.json({ ...cached, fromCache: true }); }
     res.set('X-Cache', 'MISS');
 
     const text = await generate({

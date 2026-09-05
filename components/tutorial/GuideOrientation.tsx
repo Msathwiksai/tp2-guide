@@ -22,6 +22,14 @@ export function GuideOrientation({ guide }: { guide: AIResponse }) {
 
   return (
     <section className="space-y-8">
+      {/* A cached guide and a freshly generated one looked identical, so there
+          was no way to tell whether opening one had spent anything. */}
+      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">
+        {guide.fromCache
+          ? '⚡ Loaded from cache — no AI call, nothing spent'
+          : '✨ Freshly generated'}
+        {guide.sources?.length ? ` · checked against ${guide.sources.length} live pages` : ''}
+      </p>
       {guide.whatItIs && (
         <div className="rounded-3xl border border-amber-200/70 bg-amber-50/60 p-8 dark:border-amber-500/20 dark:bg-amber-500/5">
           {/* Deliberately not "What <app> is": the text describes the topic

@@ -15,7 +15,7 @@ const ARTICLES: Article[] = [
     id: 'version-drift',
     tag: 'Method',
     title: 'Why version drift breaks most tutorials',
-    standfirst: 'The average software tutorial is wrong within eighteen months, and it is almost never the author’s fault.',
+    standfirst: 'A tutorial goes wrong the moment a vendor moves a menu, and it is almost never the author’s fault.',
     readingTime: '4 min',
     body: [
       'A tutorial encodes two things: a concept and a path. The concept — what a layer mask is, what a container does — ages slowly. The path — “open Edit, then Preferences, then Performance” — ages the moment a vendor reorganises a menu.',

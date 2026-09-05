@@ -27,17 +27,23 @@ const ENDPOINTS = [
 }`,
     response: `{
   "overview": "...",
+  "whatItIs": "...",
+  "whenToUse": ["..."],
+  "howYouGetIt": "...",
   "steps": [
     {
       "title": "Enter sculpt mode",
       "description": "...",
       "difficulty": "Beginner",
-      "visualCue": "..."
+      "visualCue": "...",
+      "commands": []
     }
   ],
   "commonShortcuts": [{ "key": "Shift+Space", "action": "Brush menu" }],
   "beginnerChecklist": ["..."],
-  "faqs": [{ "question": "...", "answer": "..." }]
+  "faqs": [{ "question": "...", "answer": "..." }],
+  "sources": [{ "title": "...", "url": "..." }],
+  "fromCache": false
 }`,
   },
   {
