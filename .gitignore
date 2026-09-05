@@ -25,3 +25,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Cached generations, so a restart does not re-bill work already paid for
+.cache/

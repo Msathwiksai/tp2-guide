@@ -1,5 +1,5 @@
 
-import React, { useState, lazy, Suspense } from 'react';
+import React, { Suspense, lazy, useMemo, useState } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import Header from './components/Header';
 import Home from './components/Home';
@@ -19,6 +19,7 @@ import ScrollToTop from './components/ScrollToTop';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Tutorial } from './types';
 import { TUTORIALS } from './constants';
+import { useSavedApps, toTutorial } from './services/library';
 
 /**
  * React Router reuses the same component instance when only the :id param
@@ -59,6 +60,15 @@ const App: React.FC = () => {
     setExternalMessage({ text: question, topic });
   };
 
+  // Built-in guides plus anything the reader has synthesised, so an app they
+  // already paid to generate appears under its own category instead of the
+  // category page still reading "0 curated guides".
+  const savedApps = useSavedApps();
+  const allTutorials = useMemo(
+    () => [...TUTORIALS, ...savedApps.filter(app => !TUTORIALS.some(t => t.id === app.id)).map(toTutorial)],
+    [savedApps],
+  );
+
   const scrollToLibrary = () => {
     if (location.pathname !== '/') {
       navigate('/');
@@ -92,7 +102,7 @@ const App: React.FC = () => {
             element={
               <Home 
                 onSelect={handleSelectTutorial} 
-                tutorials={TUTORIALS} 
+                tutorials={allTutorials} 
                 onWatchDemo={() => setIsDemoOpen(true)}
                 onStartCourse={() => handleSelectTutorial(TUTORIALS[0])}
               />

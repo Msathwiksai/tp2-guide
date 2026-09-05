@@ -1,6 +1,15 @@
 import { AIResponse, CommandExplanation, CommandOS, ExploringMode } from '../types';
 
-type VerifyResponse = { exists: boolean; correctedName?: string; reason?: string };
+type VerifyResponse = {
+  exists: boolean;
+  correctedName?: string;
+  reason?: string;
+  /** Where it belongs in the library, so a synthesised app can be filed. */
+  category?: string;
+  /** Releases someone would plausibly be running, newest first. */
+  versions?: string[];
+  icon?: string;
+};
 
 /**
  * Carries the HTTP status so callers can branch on it. Sniffing `message` for

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { GuideOrientation, GuideWrapUp } from './tutorial/GuideOrientation';
 import { TUTORIALS } from '../constants';
+import { saveApp, useSavedApps, toTutorial } from '../services/library';
 import { getGuideContent, verifyApplicationExistence, getCapabilities, ApiError } from '../services/geminiService';
 import { AIResponse, Tutorial, ExploringMode, Category } from '../types';
 import PageMeta from './PageMeta';
@@ -58,10 +59,16 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
   // Distinct from setupNeeded: the key works, every model is just overloaded.
   const [busyError, setBusyError] = useState(false);
   const [customAppInfo, setCustomAppInfo] = useState<{ name: string; exists: boolean } | null>(null);
+  const savedApps = useSavedApps();
 
   const tutorial = useMemo(() => {
     const staticTut = TUTORIALS.find(t => t.id === id);
     if (staticTut) return staticTut;
+
+    // A previously synthesised app carries its real category, versions and
+    // icon, so reopening one does not fall back to the generic placeholder.
+    const saved = savedApps.find(app => app.id === id);
+    if (saved) return toTutorial(saved);
 
     return {
       id: id || 'custom',
@@ -74,7 +81,7 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
       advancedTopics: ['Technical Configuration', 'Performance Tuning'],
       versions: ['Current'],
     } as Tutorial;
-  }, [id, safeId, customAppInfo]);
+  }, [id, safeId, customAppInfo, savedApps]);
 
   // --- URL-derived state -----------------------------------------------------
   const selectedTopic = searchParams.get('topic');
@@ -156,7 +163,19 @@ const TutorialView: React.FC<TutorialViewProps> = ({ onAskDoubt }) => {
           setQuotaError(false);
           const result = await verifyApplicationExistence(safeId);
           if (!cancelled && result.exists) {
-            setCustomAppInfo({ name: result.correctedName || safeId, exists: true });
+            const name = result.correctedName || safeId;
+            setCustomAppInfo({ name, exists: true });
+            // Recorded here rather than after generation: verification is the
+            // call that established the app is real, and its category is what
+            // the library needs. Without this the app vanished with the URL and
+            // the same calls were paid for again on the next visit.
+            saveApp({
+              id: id || safeId,
+              name,
+              category: (result.category as Category) || Category.PRODUCTIVITY,
+              icon: result.icon || '⚙️',
+              versions: result.versions?.length ? result.versions : ['Current'],
+            });
           } else if (!cancelled) {
             setVerificationError(result.reason || 'The target software could not be verified.');
           }
