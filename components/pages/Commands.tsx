@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { explainCommand, ApiError } from '../../services/geminiService';
+import { ShareCommand } from '../ShareCommand';
 import { CommandExplanation, CommandOS, CommandPart } from '../../types';
 import PageShell, { Card, Section } from './PageShell';
 import { baseOf, familiarityFor, getSavedExplanation, recordLookup } from '../../services/commandJournal';
@@ -34,7 +35,8 @@ const Breakdown: React.FC<{
   result: CommandExplanation;
   /** Times each flag was seen before this lookup; drives the familiarity badge. */
   familiarity: Record<string, number>;
-}> = ({ result, familiarity }) => {
+  os: CommandOS;
+}> = ({ result, familiarity, os }) => {
   const risk = RISK_STYLES[result.risk] ?? RISK_STYLES.caution;
 
   return (
@@ -47,6 +49,9 @@ const Breakdown: React.FC<{
           <span className={`${risk.badge} text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap`}>
             {risk.icon} {risk.label}
           </span>
+        </div>
+        <div className="border-t border-stone-200 bg-stone-50 px-8 py-5 dark:border-stone-700 dark:bg-stone-900/60">
+          <ShareCommand command={result.normalized} os={os} />
         </div>
         <div className="p-10 space-y-4">
           <p className="text-2xl font-black text-stone-900 tracking-tight leading-snug">{result.summary}</p>
@@ -335,7 +340,7 @@ const Commands: React.FC = () => {
               </button>
             </Card>
           )}
-          <Breakdown result={result} familiarity={familiarity} />
+          <Breakdown result={result} familiarity={familiarity} os={os} />
         </>
       )}
 
